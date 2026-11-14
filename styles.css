@@ -23,6 +23,57 @@
   --shadow:0 8px 24px rgba(40,30,10,.12);
   --panel:linear-gradient(180deg,#ffffff 0%,#f8f6f2 100%); --hi:inset 0 1px 0 rgba(255,255,255,.8);
 }
+/* 파스텔 스티커 다이어리: 라벤더와 민트, 둥근 카드, 점선 모눈 종이 */
+:root[data-theme="pastel"]{
+  color-scheme:light;
+  --bg:#f6f2fd; --surface:#ffffff; --surface2:#fdfbff; --raised:#f1ecfb; --ink:#3b3350; --muted:#857d98; --line:#e7e0f5; --line2:#d9cff0;
+  --accent:#8b7cf6; --accent-soft:rgba(139,124,246,.13); --on-accent:#ffffff;
+  --root:#ff7fa3; --on-root:#ffffff; --tone:#8b7cf6; --on-tone:#ffffff;
+  --ask:#2bbfa4; --good:#2db88a; --good-soft:rgba(45,184,138,.13); --bad:#ef5a77; --bad-soft:rgba(239,90,119,.11);
+  --wood:#f5e9de; --fret:#d2bfae; --string:#9c8fae; --inlay:#e9cfe2; --nut:#fffaf4; --dim:#ece4f6; --on-dim:#9a90ad;
+  --radius:22px; --shadow:0 10px 28px rgba(139,124,246,.16);
+  --panel:#ffffff; --hi:0 2px 0 rgba(139,124,246,.07);
+  --disp:"Fredoka","Pretendard Variable",Pretendard,sans-serif; --soft:"Gowun Dodum","Pretendard Variable",Pretendard,sans-serif;
+}
+[data-theme="pastel"] body{background-color:var(--bg);background-image:radial-gradient(#e3daf7 1.2px,transparent 1.3px);background-size:20px 20px}
+[data-theme="pastel"] .page-title,[data-theme="pastel"] .lcard h3,[data-theme="pastel"] .onb h2,[data-theme="pastel"] .lvl-card .t,[data-theme="pastel"] .unit-head b{font-family:var(--soft);font-weight:400;letter-spacing:0}
+[data-theme="pastel"] .page-title{font-size:28px}
+[data-theme="pastel"] .btn{border-radius:18px;box-shadow:none;background:var(--surface)}
+[data-theme="pastel"] .btn.primary{background:linear-gradient(135deg,#a394ff,#8b7cf6);border-color:transparent;box-shadow:0 4px 0 #6f60df,0 8px 18px rgba(139,124,246,.3)}
+[data-theme="pastel"] .btn.good{box-shadow:0 4px 0 #1f9670}
+[data-theme="pastel"] .btn.bad{box-shadow:0 4px 0 #cf3f5b}
+[data-theme="pastel"] .card,[data-theme="pastel"] .unit-head,[data-theme="pastel"] .tool,[data-theme="pastel"] .stat{border-color:var(--line);box-shadow:var(--hi),0 6px 18px rgba(139,124,246,.08)}
+[data-theme="pastel"] .lvl-badge{background:linear-gradient(140deg,#ffd6e3,#e3dcff);border-color:#fff;box-shadow:0 6px 18px rgba(255,127,163,.22)}
+[data-theme="pastel"] .lvl-badge b{color:#e75b88}
+[data-theme="pastel"] .bar-fill{background:linear-gradient(90deg,#ff9fbd,#a394ff);box-shadow:none}
+[data-theme="pastel"] .bar-track{background:var(--raised);border-color:transparent}
+[data-theme="pastel"] .led.on,[data-theme="pastel"] .week .on i{box-shadow:none}
+[data-theme="pastel"] .node .disc{box-shadow:0 5px 0 #d9cff0;border-color:#fff}
+[data-theme="pastel"] .node.done .disc{box-shadow:0 5px 0 #1f9670}
+[data-theme="pastel"] .node.current .disc{background:linear-gradient(140deg,#ff9fbd,#a394ff);box-shadow:0 5px 0 #6f60df}
+[data-theme="pastel"] .node .nt{background:transparent}
+[data-theme="pastel"] .stars svg.on{color:#ffb84d}
+[data-theme="pastel"] .sheet{background:var(--bg)}
+[data-theme="pastel"] .sheet-foot{border-radius:24px 24px 0 0;box-shadow:0 -6px 24px rgba(139,124,246,.12);border-top:0}
+[data-theme="pastel"] .big-sym{color:#e75b88}
+[data-theme="pastel"] .nav button[aria-current="page"]::before{background:#ff7fa3;box-shadow:none}
+[data-theme="pastel"] .nav button[aria-current="page"] svg{color:var(--accent)}
+[data-theme="pastel"] .xp-pop{color:#e75b88;text-shadow:0 4px 16px rgba(255,127,163,.5)}
+/* 스티커 장식: 파스텔 테마에서만 */
+[data-theme="pastel"] .lvl-card{position:relative;overflow:visible}
+[data-theme="pastel"] .lvl-card::after,[data-theme="pastel"] .result::after,[data-theme="pastel"] .unit-head::after{content:"";position:absolute;width:38px;height:38px;background:var(--sticker) center/contain no-repeat;pointer-events:none}
+[data-theme="pastel"] .lvl-card::after{top:-12px;right:-6px;transform:rotate(12deg);--sticker:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 4l4.6 9.8 10.7 1.3-7.9 7.3 2 10.6L20 27.8 10.6 33l2-10.6-7.9-7.3 10.7-1.3z' fill='%23ffd166' stroke='%23fff' stroke-width='3' stroke-linejoin='round'/%3E%3C/svg%3E")}
+[data-theme="pastel"] .result{position:relative}
+[data-theme="pastel"] .result::after{top:10px;right:14px;transform:rotate(-10deg);--sticker:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 34S5 25 5 14.5C5 9 9 6 13 6c3 0 5.5 1.8 7 4.3C21.5 7.8 24 6 27 6c4 0 8 3 8 8.5C35 25 20 34 20 34z' fill='%23ff8fb1' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E")}
+[data-theme="pastel"] .unit-head{position:relative}
+[data-theme="pastel"] .unit-head::after{width:26px;height:26px;top:-9px;left:-6px;transform:rotate(-14deg);--sticker:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 34S5 25 5 14.5C5 9 9 6 13 6c3 0 5.5 1.8 7 4.3C21.5 7.8 24 6 27 6c4 0 8 3 8 8.5C35 25 20 34 20 34z' fill='%23b8acff' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E")}
+/* 테마 고르기 카드 */
+.themes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px}
+.theme-pick{display:flex;flex-direction:column;gap:8px;align-items:center;padding:10px 6px 12px;border-radius:16px;border:2px solid var(--line2);background:var(--surface);font-size:14px;font-weight:800;color:var(--ink)}
+.theme-pick[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.theme-pick i{display:block;width:100%;aspect-ratio:3/4;border-radius:10px}
+.share-btn{display:inline-grid;place-items:center;width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);flex:none}
+.share-btn svg{width:20px;height:20px}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
 body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.6;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased;overscroll-behavior-y:none}

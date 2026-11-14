@@ -42,6 +42,7 @@ const I = {
   tap:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7" opacity=".5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>',
   target:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>',
   star:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/></svg>',
+  share:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>',
   okc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M7.5 12.5l3 3 6-6.5"/></svg>',
   noc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7"/></svg>',
 };
@@ -50,7 +51,7 @@ const starsHtml = n => `<div class="stars" aria-label="별 ${n}개">${[0,1,2].ma
 
 /* ---------- 저장 ---------- */
 const KEY = 'bassTrainer.v1';
-function fresh() { return {lessons:{}, items:{}, days:{}, tot:{}, xp:0, onboarded:false, settings:{sound:true, orient:'auto', unlockAll:false, mic:false, light:false}}; }
+function fresh() { return {lessons:{}, items:{}, days:{}, tot:{}, xp:0, onboarded:false, settings:{sound:true, orient:'auto', unlockAll:false, mic:false, theme:'stage'}}; }
 let D = fresh();
 try { const x = JSON.parse(localStorage.getItem(KEY)); if (x && x.lessons) D = Object.assign(fresh(), x, {settings:Object.assign(fresh().settings, x.settings || {})}); } catch (e) {}
 function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) {} }
@@ -176,7 +177,7 @@ const Wake = { lock:null, async on() { try { if ('wakeLock' in navigator && !thi
 /* ---------- 지판 ---------- */
 function orient() { const o = D.settings.orient; if (o === 'v' || o === 'h') return o; return (innerWidth > innerHeight && innerWidth >= 600) ? 'h' : 'v'; }
 const DOT = {root:['var(--root)','var(--on-root)'], tone:['var(--tone)','var(--on-tone)'], ok:['var(--good)','#04140b'], bad:['var(--bad)','#ffffff'], ask:['var(--ask)','#03131c'],
-  dim:['#3a332e','#b9b1a4'], ghost:['var(--surface)','var(--ink)']};
+  dim:['var(--dim,#3a332e)','var(--on-dim,#b9b1a4)'], ghost:['var(--surface)','var(--ink)']};
 function board(o) {
   o = Object.assign({from:0, to:12, dots:[], hiS:null, tap:null, small:false}, o);
   const v = (o.orient || orient()) === 'v';
@@ -303,7 +304,7 @@ const ivExplain = semi => '루트에서 ' + semi + '칸 거리를 ' + IVL[semi] 
 // 문제 객체: {skill, key, prompt, sub, sym, board:{...}, answers:[{t,v}], wide, mic:{pc}|{midi}, answer(v)->결과, chord:true}
 function qOpen(s) {
   s = s == null ? rnd(4) : s; const key = 'op:' + s;
-  if (Math.random() < .5) return {skill:'basics', key, correct:STR[s].n, prompt:'파란색으로 표시된 줄의 이름은?', board:{from:0, to:5, hiS:s},
+  if (Math.random() < .5) return {skill:'basics', key, correct:STR[s].n, prompt:'색이 다른 줄의 이름은 무엇일까요?', board:{from:0, to:5, hiS:s},
     answers:['E','A','D','G'].map(x => ({t:x, v:x})),
     answer:v => ({ok:v === STR[s].n, title:v === STR[s].n ? '맞습니다' : '정답은 ' + STR[s].n + '줄입니다', text:'굵은 줄부터 E, A, D, G입니다. ' + STR[s].n + '줄은 ' + STR[s].no + '번 줄이라고도 부릅니다.', dots:[{s, f:0, t:STR[s].n, c:'ok'}]})};
   return {skill:'basics', key, prompt:STR[s].n + '줄을 눌러 보세요', sub:'그 줄의 아무 칸이나 누르면 됩니다', board:{from:0, to:5},
@@ -330,7 +331,7 @@ function qFind(o, fixed) {
   else do { s = pick(o.strings); f = rnd(o.maxF + 1); pc = pcAt(s, f); } while (o.nat && !isNat(pc));
   const key = 'n:' + s + ':' + f, range = {from:0, to:Math.max(o.maxF, f)};
   const explain = countUp(s, f);
-  if (Math.random() < .5) return {skill:'notes', key, sol:{s, f}, prompt:'파란 줄에서 ' + both(pc) + ' 음을 누르세요', sub:strName(s) + ', 0~' + range.to + '프렛', board:Object.assign({hiS:s}, range),
+  if (Math.random() < .5) return {skill:'notes', key, sol:{s, f}, prompt:'색이 다른 줄에서 ' + both(pc) + ' 음을 누르세요', sub:strName(s) + ', 0~' + range.to + '프렛', board:Object.assign({hiS:s}, range),
     tap:(k, g) => { const ok = k === s && pcAt(k, g) === pc;
       return {ok, title:ok ? '맞습니다' : (k !== s ? '다른 줄을 눌렀습니다' : '누른 음은 ' + both(pcAt(k, g)) + '입니다'), text:explain,
         dots:allPos(pc, range.to, [s]).map(p => ({...p, t:nm(pc), c:'ok'})).concat(ok ? [] : [{s:k, f:g, t:nm(pcAt(k, g)), c:'bad'}])}; },
@@ -835,6 +836,7 @@ function viewToday(pg) {
     $('.week', wk).appendChild(el(`<div class="${on ? 'on' : ''}${i === 0 ? ' today' : ''}"><i></i>${['일','월','화','수','목','금','토'][x.getDay()]}</div>`)); }
   pg.appendChild(wk);
   installCard(pg);
+  shareCard(pg);
 }
 function viewLearn(pg) {
   pg.appendChild(el('<div><div class="eyebrow">4단원, 15레슨</div><h2 class="page-title">레슨 지도</h2><p class="muted small" style="margin-top:4px">문제 10개 중 8개를 맞히면 다음 레슨이 열립니다. 9개는 별 두 개, 10개는 별 세 개입니다.</p></div>'));
@@ -873,14 +875,16 @@ function viewRecords(pg) {
   // 설정
   const st = el(`<div class="card"><b>설정</b>
     <label class="sw"><span>소리</span><input type="checkbox" id="s-sound" ${D.settings.sound ? 'checked' : ''}></label>
-    <label class="sw"><span>밝은 화면 <span class="small muted">(낮에 밖에서 볼 때)</span></span><input type="checkbox" id="s-light" ${D.settings.light ? 'checked' : ''}></label>
+    <div><span class="small muted">테마</span><div class="seg" id="s-theme"><button data-v="stage">무대</button><button data-v="pastel">파스텔</button><button data-v="light">밝은 화면</button></div></div>
     <label class="sw"><span>모든 레슨 열기 <span class="small muted">(이미 아는 내용은 건너뛰기)</span></span><input type="checkbox" id="s-unlock" ${D.settings.unlockAll ? 'checked' : ''}></label>
     <div><span class="small muted">지판 방향</span><div class="seg" id="s-or"><button data-v="auto">자동</button><button data-v="v">세로</button><button data-v="h">가로</button></div></div>
+    <button class="btn sm" id="s-share">${I.share}친구에게 공유</button>
     <div class="row"><button class="btn sm" id="s-exp">기록 백업</button><button class="btn sm" id="s-imp">백업 불러오기</button><button class="btn sm" id="s-reset" style="color:var(--bad)">기록 지우기</button></div>
     <span class="small muted">기록은 이 폰에만 저장됩니다. 폰을 바꾸기 전에 백업 내용을 메모장에 붙여 두세요.</span></div>`);
   $$('#s-or button', st).forEach(b => { b.setAttribute('aria-pressed', b.dataset.v === D.settings.orient); b.onclick = () => { D.settings.orient = b.dataset.v; save(); renderTab(); }; });
+  $('#s-share', st).onclick = shareApp;
   $('#s-sound', st).onchange = e => { D.settings.sound = e.target.checked; save(); };
-  $('#s-light', st).onchange = e => { D.settings.light = e.target.checked; save(); applyTheme(); };
+  $$('#s-theme button', st).forEach(b => { b.setAttribute('aria-pressed', b.dataset.v === D.settings.theme); b.onclick = () => { D.settings.theme = b.dataset.v; save(); applyTheme(); renderTab(); }; });
   $('#s-unlock', st).onchange = e => { D.settings.unlockAll = e.target.checked; save(); };
   $('#s-exp', st).onclick = () => modal('기록 백업', `<p class="small muted">아래 글을 모두 복사해 메모장이나 카톡 나와의 채팅에 붙여 두세요.</p><textarea readonly>${esc(JSON.stringify(D))}</textarea>`, [['복사하기', m => { const t = $('textarea', m); t.select(); (navigator.clipboard ? navigator.clipboard.writeText(t.value) : Promise.reject()).then(() => toast('복사했습니다')).catch(() => { try { document.execCommand('copy'); toast('복사했습니다'); } catch (e) { toast('글을 길게 눌러 직접 복사해 주세요'); } }); }], ['닫기']]);
   $('#s-imp', st).onclick = () => modal('백업 불러오기', '<p class="small muted">백업해 둔 글을 붙여 넣으세요. 지금 기록은 백업 내용으로 바뀝니다.</p><textarea></textarea>', [['불러오기', m => { try { const x = JSON.parse($('textarea', m).value); if (!x.lessons) throw 0; D = Object.assign(fresh(), x); save(); toast('기록을 불러왔습니다'); renderTab(); return true; } catch (e) { toast('백업 글이 올바르지 않습니다'); return false; } }], ['취소']]);
@@ -895,6 +899,20 @@ function modal(title, html, btns) {
     b.onclick = () => { const r = fn ? fn(m) : true; if (r !== false && (!fn || r === true || kind === 'danger')) back.remove(); }; row.appendChild(b); });
   back.addEventListener('click', e => { if (e.target === back) back.remove(); });
   document.body.appendChild(back);
+}
+
+/* ---------- 친구에게 공유 ---------- */
+const APP_URL = 'https://dhtpxor.github.io/bass-trainer/';
+const SHARE_TEXT = '베이스를 처음 배울 때 쓰는 연습 앱이에요. 폰에서 열고 "홈 화면에 추가"를 누르면 앱처럼 쓸 수 있어요.';
+async function shareApp() {
+  const data = {title:'베이스 트레이너', text:SHARE_TEXT, url:APP_URL};
+  try { if (navigator.share) { await navigator.share(data); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(SHARE_TEXT + ' ' + APP_URL); toast('주소를 복사했습니다. 카톡이나 문자에 붙여 넣으세요'); return; } catch (e) {}
+  modal('친구에게 공유', `<p class="small muted">아래 글을 길게 눌러 복사한 뒤 카톡이나 문자에 붙여 넣으세요.</p><textarea readonly>${esc(SHARE_TEXT + ' ' + APP_URL)}</textarea>`, [['닫기']]);
+}
+function shareCard(pg) {
+  const c = el(`<div class="card"><div class="spread"><div><b>친구에게 공유</b><div class="small muted">같이 배우면 더 오래 이어 갑니다. 기록은 각자의 폰에 따로 저장됩니다.</div></div></div><button class="btn block">${I.share}공유하기</button></div>`);
+  $('button', c).onclick = shareApp; pg.appendChild(c);
 }
 
 /* ---------- 설치 ---------- */
@@ -929,7 +947,12 @@ window.addEventListener('scroll', () => $('#bar').classList.toggle('scrolled', s
 let rz = 0; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (D.settings.orient === 'auto' && !sheetClose) renderTab(); }, 200); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { Clock.stop(); } });
 
-function applyTheme() { document.documentElement.dataset.theme = D.settings.light ? 'light' : 'dark'; const m = $('#theme-color'); if (m) m.content = D.settings.light ? '#ecebe7' : '#0c0d0f'; }
+const THEMES = {stage:{attr:'dark', color:'#0c0d0f', name:'무대', prev:'linear-gradient(160deg,#1c1f23 0 55%,#ffb020 55% 62%,#16181b 62%)'},
+  pastel:{attr:'pastel', color:'#f6f2fd', name:'파스텔', prev:'linear-gradient(160deg,#f6f2fd 0 55%,#ff9fbd 55% 62%,#a394ff 62%)'},
+  light:{attr:'light', color:'#ecebe7', name:'밝은 화면', prev:'linear-gradient(160deg,#ffffff 0 55%,#c77800 55% 62%,#ecebe7 62%)'}};
+if (D.settings.light && !D.settings.theme) D.settings.theme = 'light';
+if (!THEMES[D.settings.theme]) D.settings.theme = 'stage';
+function applyTheme() { const t = THEMES[D.settings.theme]; document.documentElement.dataset.theme = t.attr; const m = $('#theme-color'); if (m) m.content = t.color; }
 const ART = {
   board:'<svg viewBox="0 0 280 200"><rect x="40" y="20" width="200" height="160" rx="10" fill="var(--wood)"/><rect x="40" y="20" width="200" height="10" fill="var(--nut)"/>' + [70,110,150].map(y => `<rect x="40" y="${y}" width="200" height="3" fill="var(--fret)"/>`).join('') + [65,115,165,215].map((x, i) => `<rect x="${x - 2 + i * .3}" y="30" width="${5 - i}" height="150" fill="var(--string)"/>`).join('') + '<circle cx="115" cy="90" r="16" fill="var(--root)"/><circle cx="165" cy="130" r="16" fill="var(--tone)"/><circle cx="215" cy="90" r="16" fill="var(--ask)"/></svg>',
   loop:'<svg viewBox="0 0 280 200"><path d="M70 100 A70 70 0 0 1 210 100" fill="none" stroke="var(--line2)" stroke-width="4" stroke-dasharray="8 8"/><path d="M210 100 A70 70 0 0 1 70 100" fill="none" stroke="var(--line2)" stroke-width="4" stroke-dasharray="8 8"/>' + [[70,100,'1'],[140,30,'2'],[210,100,'3']].map(([x, y, t], i) => `<circle cx="${x}" cy="${y}" r="26" fill="var(--raised)" stroke="${i < 2 ? 'var(--good)' : 'var(--accent)'}" stroke-width="3"/><text x="${x}" y="${y + 1}" text-anchor="middle" dominant-baseline="central" font-size="24" font-weight="700" fill="var(--ink)" font-family="var(--disp)">${t}</text>`).join('') + '<text x="140" y="150" text-anchor="middle" font-size="18" font-weight="800" fill="var(--muted)" font-family="var(--font)">복습, 레슨, 악기</text></svg>',
@@ -941,16 +964,20 @@ function onboarding() {
     {h:'베이스를 처음 잡았다면', p:'줄 이름부터 코드톤과 리듬까지, 15개 레슨으로 차근차근 익힙니다. 설명은 원하는 만큼 천천히 읽고 넘기세요.', art:ART.board},
     {h:'하루 10분, 세 단계', p:'복습, 레슨, 악기 연습 순서로 합니다. 틀린 문제는 다음 날 다시 나와서 약한 자리가 채워집니다. 맞힐수록 경험치가 쌓여 레벨이 오릅니다.', art:ART.loop},
     {h:'베이스로 직접 쳐서 확인', p:'마이크를 켜면 화면을 누르는 대신 실제로 친 음으로 정답을 확인합니다. 튜너도 같은 마이크를 씁니다. 마이크 허락은 처음 쓸 때 따로 묻습니다.', art:ART.mic},
+    {h:'마음에 드는 테마를 고르세요', p:'나중에 기록 탭에서 언제든 바꿀 수 있습니다.', themes:true},
   ];
   let i = 0; const o = el('<div class="onb" role="dialog" aria-label="처음 사용 안내"></div>'); document.body.appendChild(o);
   const done = () => { D.onboarded = true; save(); o.remove(); };
   const draw = () => { const s = slides[i];
-    o.innerHTML = `<div class="art">${s.art}</div><h2>${esc(s.h)}</h2><p>${esc(s.p)}</p><div class="dots">${slides.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div><div class="acts"><button class="btn" id="onb-skip">${i ? '이전' : '건너뛰기'}</button><button class="btn primary" id="onb-next">${i === slides.length - 1 ? '시작하기' : '다음'}</button></div>`;
+    const pick = s.themes ? `<div class="themes">${Object.keys(THEMES).map(k => `<button class="theme-pick" data-t="${k}" aria-pressed="${D.settings.theme === k}"><i style="background:${THEMES[k].prev}"></i>${THEMES[k].name}</button>`).join('')}</div>` : '';
+    o.innerHTML = `<div class="art">${s.art || ''}</div><h2>${esc(s.h)}</h2><p>${esc(s.p)}</p>${pick}<div class="dots">${slides.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div><div class="acts"><button class="btn" id="onb-skip">${i ? '이전' : '건너뛰기'}</button><button class="btn primary" id="onb-next">${i === slides.length - 1 ? '시작하기' : '다음'}</button></div>`;
     $('#onb-skip', o).onclick = () => { if (i) { i--; draw(); } else done(); };
-    $('#onb-next', o).onclick = () => { if (i < slides.length - 1) { i++; draw(); } else done(); }; };
+    $('#onb-next', o).onclick = () => { if (i < slides.length - 1) { i++; draw(); } else done(); };
+    $$('.theme-pick', o).forEach(b => b.onclick = () => { D.settings.theme = b.dataset.t; save(); applyTheme(); draw(); }); };
   draw();
 }
 applyTheme();
+$('#sharebtn').innerHTML = I.share; $('#sharebtn').onclick = shareApp;
 if (!location.hash) history.replaceState(null, '', '#today');
 tab = TABS.some(t => t[0] === location.hash.slice(1)) ? location.hash.slice(1) : 'today';
 renderTab();
