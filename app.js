@@ -51,13 +51,13 @@ const starsHtml = n => `<div class="stars" aria-label="별 ${n}개">${[0,1,2].ma
 
 /* ---------- 저장 ---------- */
 const KEY = 'bassTrainer.v1';
-function fresh() { return {lessons:{}, items:{}, days:{}, tot:{}, xp:0, onboarded:false, settings:{sound:true, orient:'auto', unlockAll:false, mic:false, theme:'stage'}}; }
+function fresh() { return {lessons:{}, items:{}, days:{}, tot:{}, xp:0, onboarded:false, settings:{sound:true, orient:'auto', unlockAll:false, mic:false, theme:'stage', startTier:1}}; }
 let D = fresh();
 try { const x = JSON.parse(localStorage.getItem(KEY)); if (x && x.lessons) D = Object.assign(fresh(), x, {settings:Object.assign(fresh().settings, x.settings || {})}); } catch (e) {}
 function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) {} }
 const today = () => TH.dayKey();
 function dayRec(k = today()) { return D.days[k] || (D.days[k] = {steps:{}, q:{}}); }
-const SKILL_NAMES = {basics:'기초', notes:'음 위치', intervals:'음정', chords:'코드톤', scales:'스케일', rhythm:'리듬'};
+const SKILL_NAMES = {basics:'기초', notes:'음 위치', intervals:'음정', chords:'코드톤', scales:'스케일', rhythm:'리듬', tech:'지식과 주법'};
 function record(skill, key, ok) {
   const d = dayRec(); const r = d.q[skill] || (d.q[skill] = [0, 0]); r[1]++; if (ok) r[0]++;
   const t = D.tot[skill] || (D.tot[skill] = [0, 0]); t[1]++; if (ok) t[0]++;
@@ -92,8 +92,15 @@ function addXP(n, pop) {
 }
 const lessonIndex = id => LESSONS.findIndex(l => l.id === id);
 const isDone = id => !!(D.lessons[id] && D.lessons[id].done);
-function currentLesson() { return LESSONS.find(l => !isDone(l.id)) || null; }
-function isOpen(l) { if (D.settings.unlockAll) return true; const i = lessonIndex(l.id); return i === 0 || isDone(LESSONS[i - 1].id) || isDone(l.id); }
+const startTier = () => D.settings.startTier || 1;
+function currentLesson() { return LESSONS.find(l => l.unit >= startTier() && !isDone(l.id)) || LESSONS.find(l => !isDone(l.id)) || null; }
+function isOpen(l) {
+  if (D.settings.unlockAll || isDone(l.id) || l.unit < startTier()) return true;
+  const i = lessonIndex(l.id); if (i === 0) return true;
+  if (l.unit === startTier() && LESSONS[i - 1].unit < l.unit) return true;
+  return isDone(LESSONS[i - 1].id);
+}
+const tierName = u => (UNITS.find(x => x.id === u) || {}).name || '';
 function reviewKeys() { return TH.dueItems(D.items, today()); }
 
 /* ---------- 소리 ---------- */
@@ -125,9 +132,9 @@ const AU = {
 /* 박자 시계: 앞으로 0.15초 분량을 미리 예약하고, 화면은 소리가 나는 순간에 맞춘다 */
 const Clock = {
   on:false, n:0, next:0, timer:0, q:[], log:[], bpm:70, sub:4, cb:null, ui:null, onstop:null,
-  start({bpm, sub, tick, ui, onstop, bars}) {
+  start({bpm, sub, tick, ui, onstop, bars, total}) {
     this.stop(); const a = AU.get(); if (!a) return;
-    Object.assign(this, {on:true, n:0, q:[], log:[], bpm, sub, cb:tick, ui, onstop, end: bars ? bars * 4 * sub : 0});
+    Object.assign(this, {on:true, n:0, q:[], log:[], bpm, sub, cb:tick, ui, onstop, end: total || (bars ? bars * 4 * sub : 0)});
     this.next = a.currentTime + .12; clearInterval(this.timer); this.timer = setInterval(() => this.pump(), 25); this.pump();
     const loop = () => { if (!this.on) return; const now = a.currentTime;
       while (this.q.length && this.q[0][1] <= now) { const [n] = this.q.shift(); if (this.ui) this.ui(n); }
@@ -268,6 +275,7 @@ function figure(fig) {
     for (let s = 0; s < 4; s++) { if (fig.strings && !fig.strings.includes(s)) continue;
       for (let f = fig.from; f <= fig.to; f++) { const i = sc.st.indexOf((pcAt(s, f) - fig.root + 12) % 12); if (i >= 0) o.dots.push({s, f, t:sc.lb[i], c:i ? 'tone' : 'root'}); } }
     legend = [['root','루트(1)'],['tone','스케일 음']]; }
+  else if (fig.k === 'pts') { o = {from:fig.from, to:fig.to, dots:fig.pts.map(([s, f, t, c]) => ({s, f, t, c:c || 'tone'}))}; }
   else if (fig.k === 'appr') { o = {from:2, to:7, dots:[{s:fig.from[0], f:fig.from[1], t:'A', c:'root'}, {s:1, f:4, t:'C#', c:'ask'}, {s:fig.to[0], f:fig.to[1], t:'D', c:'tone'}]};
     legend = [['root','지금 코드 A'],['ask','접근음 C#'],['tone','다음 코드 D']]; }
   add(board(o));
@@ -276,16 +284,17 @@ function figure(fig) {
 }
 function rhythmGrid(id, nowIdx) {
   const r = RHYTHMS.find(x => x.id === id);
-  return `<div class="rgrid" aria-label="${esc(r.name)} 리듬 그림">${Array.from({length:16}, (_, k) => `<i class="${r.s.includes(k) ? 'on' : ''}${k % 4 === 0 ? ' beat' : ''}${k === nowIdx ? ' now' : ''}"></i>`).join('')}</div>`;
+  return `<div class="rgrid" style="grid-template-columns:repeat(${r.n},1fr)" aria-label="${esc(r.name)} 리듬 그림">${Array.from({length:r.n}, (_, k) => `<i class="${r.s.includes(k) ? 'on' : ''}${r.acc.includes(k) ? ' beat' : ''}${k === nowIdx ? ' now' : ''}"></i>`).join('')}</div>`;
 }
 const COUNT16 = ['1','e','&','a','2','e','&','a','3','e','&','a','4','e','&','a'];
+const rCount = r => r.cnt || COUNT16;
 function playRhythm(id, bpm, bars, ui, onstop) {
   const r = RHYTHMS.find(x => x.id === id);
-  Clock.start({bpm, sub:4, bars, tick:(n, t) => { const k = n % 16; if (k % 4 === 0) AU.click(t, k === 0); if (r.s.includes(k)) AU.pluck(28, t, .3); }, ui, onstop});
+  Clock.start({bpm, sub:r.sub, total:bars ? bars * r.n : 0, tick:(n, t) => { const k = n % r.n; if (r.acc.includes(k)) AU.click(t, k === 0); if (r.s.includes(k)) AU.pluck(28, t, .3); }, ui:ui ? (n => ui(n % r.n)) : null, onstop});
 }
 const LINE_OFF = {R:0, 5:7, 8:12, 7:10, 3:4};
 function playLine(pat, rootMidi, bpm, ui, onstop) {
-  Clock.start({bpm, sub:2, bars:2, tick:(n, t) => { const r = pat[n % 8]; if (n % 2 === 0) AU.click(t, n % 8 === 0); if (r) AU.pluck(rootMidi + LINE_OFF[r], t, .32); }, ui, onstop});
+  Clock.start({bpm, sub:2, bars:2, tick:(n, t) => { const r = pat[n % 8]; if (n % 2 === 0) AU.click(t, n % 8 === 0); if (r === 'x') AU.pluck(rootMidi, t, .045); else if (r) AU.pluck(rootMidi + LINE_OFF[r], t, .32); }, ui, onstop});
 }
 
 /* ---------- 풀이 문구 ---------- */
@@ -386,20 +395,53 @@ function qDegree(scaleId, fix) {
     mic:{pc, label:sc.lb[i] + '도 ' + name}};
 }
 function qRhythm(set, idFix) {
-  const id = idFix || pick(set), others = shuffle(RHYTHMS.filter(r => r.id !== id && set.concat(['q','e']).includes(r.id))).slice(0, 2), opts = shuffle([id, ...others.map(r => r.id)]);
-  const r = RHYTHMS.find(x => x.id === id);
+  const id = idFix || pick(set), r = RHYTHMS.find(x => x.id === id);
+  const same = RHYTHMS.filter(x => x.id !== id && x.n === r.n), pref = shuffle(same.filter(x => set.includes(x.id))), rest = shuffle(same.filter(x => !set.includes(x.id)));
+  const opts = shuffle([id, ...pref.concat(rest).slice(0, 2).map(x => x.id)]);
   return {skill:'rhythm', key:'r:' + id, correct:id, prompt:'들리는 리듬은 어느 것일까요?', sub:'메트로놈 소리가 박입니다. 다시 듣기를 눌러 여러 번 들어도 됩니다', rhythm:{id, opts},
     answer:v => ({ok:v === id, title:v === id ? '맞습니다. ' + r.name + '입니다' : '정답은 ' + r.name + '입니다', text:'세는 법: ' + r.count + '. 검은 칸에서 줄을 칩니다.'})};
 }
-function qAppr() {
-  const pairs = [[9,2],[4,9],[7,0],[2,7],[0,5],[9,4],[5,7]], [a, b] = pick(pairs), up = Math.random() < .3, t = (b + (up ? 1 : 11)) % 12;
-  const opts = shuffle([t, (b + (up ? 11 : 1)) % 12, (b + 2) % 12, (a + 1) % 12].filter((v, i, arr) => arr.indexOf(v) === i)).slice(0, 4);
-  if (!opts.includes(t)) opts[0] = t;
-  return {skill:'chords', key:'ap', correct:t, prompt:ROOT_NAMES[a] + '에서 ' + ROOT_NAMES[b] + '로 넘어갑니다. ' + ROOT_NAMES[b] + '의 한 칸 ' + (up ? '위' : '아래') + ' 접근음은?', wide:false,
-    answers:opts.map(v => ({t:both(v), v})), answer:v => ({ok:v === t, title:v === t ? '맞습니다' : '정답은 ' + both(t) + '입니다', text:'접근음은 다음 코드 루트의 바로 옆 칸입니다. ' + ROOT_NAMES[b] + '에서 한 칸 ' + (up ? '위' : '아래') + '는 ' + both(t) + '입니다. 마디의 마지막 박에 치고 다음 마디 첫 박에 ' + ROOT_NAMES[b] + '로 들어갑니다.'})};
+function qAppr(kind) {
+  const pairs = [[9,2],[4,9],[7,0],[2,7],[0,5],[9,4],[5,7]], [a, b] = pick(pairs);
+  kind = kind || (Math.random() < .3 ? 'above' : 'below');
+  const t = (b + (kind === 'above' ? 1 : kind === 'fifth' ? 7 : 11)) % 12;
+  const cand = [t, (b + 1) % 12, (b + 11) % 12, (b + 7) % 12, (b + 2) % 12, (a + 1) % 12, (b + 5) % 12].filter((v, i, arr) => arr.indexOf(v) === i);
+  const opts = shuffle([t].concat(shuffle(cand.slice(1)).slice(0, 3)));
+  const what = kind === 'fifth' ? '5도' : '한 칸 ' + (kind === 'above' ? '위' : '아래');
+  return {skill:'chords', key:'ap:' + kind, correct:t, prompt:ROOT_NAMES[a] + '에서 ' + ROOT_NAMES[b] + '로 넘어갑니다. ' + ROOT_NAMES[b] + '의 ' + what + ' 접근음은?',
+    answers:opts.map(v => ({t:both(v), v})), answer:v => ({ok:v === t, title:v === t ? '맞습니다' : '정답은 ' + both(t) + '입니다', text:(kind === 'fifth' ? '다음 루트의 5도에서 루트로 가면 강하게 해결됩니다. ' : '접근음은 다음 코드 루트의 바로 옆 칸입니다. ') + ROOT_NAMES[b] + '의 ' + what + '는 ' + both(t) + '입니다. 마디의 마지막 박에 치고 다음 마디 첫 박에 ' + ROOT_NAMES[b] + '로 들어갑니다.'})};
 }
-function genFromDrill(d) {
-  if (d.type === 'mix') return genFromDrill(pick(d.parts));
+function qMcq(lid, i) {
+  const L = LESSONS.find(l => l.id === lid), b = L.bank[i], right = b.a[0];
+  return {skill:'tech', key:'mq:' + lid + ':' + i, correct:right, prompt:b.q, sub:L.title, wide:true,
+    answers:shuffle(b.a).map(t => ({t, v:t})), answer:v => ({ok:v === right, title:v === right ? '맞습니다' : '정답은 "' + right + '"입니다', text:b.why})};
+}
+const KEYS_MAJ = [0,7,2,9,4,5,10], KEYS_MIN = [9,4,2,7,0];
+const DEG = {major:{off:[0,2,4,5,7,9,11], q:['','m','m','','','m','dim'], rn:['I','ii','iii','IV','V','vi','vii°']},
+  minor:{off:[0,2,3,5,7,8,10], q:['m','m7b5','','m','7','',''], rn:['i','ii°','III','iv','V7','VI','VII']}};
+function qRoman(mode, fix) {
+  mode = mode || 'major'; const M = DEG[mode], key = fix ? fix.key : pick(mode === 'major' ? KEYS_MAJ : KEYS_MIN), d = fix ? fix.d : rnd(7);
+  const flat = mode === 'major' ? [5,10].includes(key) : [2,7,0].includes(key);
+  const chord = k => nm((key + M.off[k]) % 12, flat) + M.q[k], kname = nm(key, flat) + (mode === 'major' ? ' 메이저' : ' 마이너');
+  const others = shuffle([0,1,2,3,4,5,6].filter(k => k !== d)).slice(0, 3);
+  const all = [0,1,2,3,4,5,6].map(k => M.rn[k] + ' ' + chord(k)).join(', ');
+  const base = {skill:'chords', key:'rn:' + mode + ':' + key + ':' + d, wide:true};
+  if (Math.random() < .5) return Object.assign(base, {correct:d, prompt:kname + ' 키의 ' + M.rn[d] + ' 코드는?', sub:'대문자는 메이저, 소문자는 마이너입니다',
+    answers:shuffle([d, ...others]).map(k => ({t:chord(k), v:k})), answer:v => ({ok:v === d, title:v === d ? '맞습니다' : '정답은 ' + chord(d) + '입니다', text:kname + ' 키의 코드: ' + all + '.'})});
+  return Object.assign(base, {correct:d, prompt:kname + ' 키에서 ' + chord(d) + '는 몇 도 코드일까요?',
+    answers:shuffle([d, ...others]).map(k => ({t:M.rn[k], v:k})), answer:v => ({ok:v === d, title:v === d ? '맞습니다' : '정답은 ' + M.rn[d] + '입니다', text:kname + ' 키의 코드: ' + all + '.'})});
+}
+function qEar(set, semiFix) {
+  const semi = semiFix != null ? semiFix : pick(set), m0 = 31 + rnd(10), play = () => { AU.pluck(m0, AU.now() + .05, .7); AU.pluck(m0 + semi, AU.now() + .6, .7); };
+  return {skill:'intervals', key:'ei:' + semi, correct:semi, prompt:'두 음 사이의 음정은 무엇일까요?', sub:'그림 없이 소리만 듣고 고르세요', replay:play, onShow:play,
+    answers:set.map(v => ({t:IVL[v], v})), answer:v => ({ok:v === semi, title:v === semi ? '맞습니다' : '정답은 ' + IVL[semi] + '입니다', text:ivExplain(semi)})};
+}
+function genFromDrill(d, ctx) {
+  ctx = ctx || {};
+  if (d.type === 'mix') return genFromDrill(pick(d.parts), ctx);
+  if (d.type === 'mcq') { const L = ctx.L; if (!L || !L.bank) return qOpen(); if (!ctx.mq || !ctx.mq.length) ctx.mq = shuffle(L.bank.map((_, i) => i)); return qMcq(L.id, ctx.mq.shift()); }
+  if (d.type === 'roman') return qRoman(d.mode);
+  if (d.type === 'ear') return qEar(d.set);
   if (d.type === 'open') return qOpen();
   if (d.type === 'step') return qStep();
   if (d.type === 'find') return qFind(d);
@@ -408,7 +450,7 @@ function genFromDrill(d) {
   if (d.type === 'chord') return qChord(d.types);
   if (d.type === 'degree') return qDegree(d.scale);
   if (d.type === 'rhythm') return qRhythm(d.set);
-  if (d.type === 'appr') return qAppr();
+  if (d.type === 'appr') return qAppr(d.kinds ? pick(d.kinds) : null);
 }
 function genFromKey(key) {
   const p = key.split(':');
@@ -421,7 +463,10 @@ function genFromKey(key) {
     if (p[0] === 'c') return qChord(null, p[1]);
     if (p[0] === 'd') return qDegree(p[1], {i:+p[2], root:+p[3]});
     if (p[0] === 'r') return qRhythm(['q','e','off','qe','s','gal','332','push'], p[1]);
-    if (p[0] === 'ap') return qAppr();
+    if (p[0] === 'ap') return qAppr(p[1] || null);
+    if (p[0] === 'mq') return qMcq(p[1], +p[2]);
+    if (p[0] === 'rn') return qRoman(p[1], {key:+p[2], d:+p[3]});
+    if (p[0] === 'ei') { const t = +p[1]; return qEar(shuffle([3,4,5,7,10,12].filter(x => x !== t)).slice(0, 3).concat(t).sort((a, b) => a - b), t); }
   } catch (e) {}
   return null;
 }
@@ -444,6 +489,7 @@ function Runner(host, foot, opts) {
     if (q.sub) head.appendChild(el(`<div class="sub">${esc(q.sub)}</div>`));
     host.appendChild(head);
     if (q.rhythm) renderRhythm(q);
+    if (q.replay) { const rb = el(`<button class="btn block" style="min-height:64px">${I.sound}두 음 다시 듣기</button>`); rb.onclick = q.replay; host.appendChild(rb); }
     let bEl = null;
     if (q.board) {
       const dots = (st.answered && st.res && st.res.dots) ? st.res.dots : (q.board.dots || []).concat(st.found, st.extra);
@@ -475,7 +521,7 @@ function Runner(host, foot, opts) {
   function renderFoot() {
     foot.innerHTML = ''; footWrap.classList.remove('ok', 'bad'); const q = st.q;
     if (!st.answered) {
-      if (q.answers) { const n = q.answers.length, a = el(`<div class="answers${n === 12 ? ' many' : ''}" style="grid-template-columns:repeat(${COLS[n] || 4},1fr)"></div>`);
+      if (q.answers) { const n = q.answers.length, a = el(`<div class="answers${n === 12 ? ' many' : ''}${q.wide ? ' long' : ''}" style="grid-template-columns:repeat(${q.wide && n === 4 && q.answers.some(x => String(x.t).length > 7) ? 1 : q.wide && n === 4 ? 2 : COLS[n] || 4},1fr)"></div>`);
         q.answers.forEach(x => { const b = el(`<button class="btn">${esc(x.t)}</button>`); b.onclick = () => onChoice(x.v); a.appendChild(b); }); foot.appendChild(a); }
       if (q.tap || q.chord) { const b = el('<button class="btn">정답 보기</button>'); b.onclick = () => giveUp(); foot.appendChild(b); }
       if (q.mic || q.chord) { const m = el(`<button class="btn${D.settings.mic ? ' primary' : ''}" aria-pressed="${D.settings.mic}">${I.mic}${D.settings.mic ? '마이크 끄기' : '베이스로 치기'}</button>`); m.onclick = toggleMic; foot.appendChild(m); }
@@ -564,7 +610,7 @@ function closeSheet(silent) { if (sheetClose) sheetClose(); }
 /* ---------- 레슨 화면 ---------- */
 function openLesson(id, startPhase) {
   const L = LESSONS.find(l => l.id === id); if (!L) return;
-  openSheet(lessonIndex(id) + 1 + '. ' + L.title, sh => {
+  openSheet(tierName(L.unit) + ' ' + (LESSONS.filter(l => l.unit === L.unit).indexOf(L) + 1) + '. ' + L.title, sh => {
     const n = L.cards.length; let phase = startPhase || 'cards', idx = 0, runner = null;
     sh.cleanup = () => runner && runner.stop();
     function cards() {
@@ -573,9 +619,9 @@ function openLesson(id, startPhase) {
       if (c.table) card.appendChild(el(`<table class="t"><tbody>${c.table.map(r => `<tr>${r.map((x, i) => i ? `<td>${esc(x)}</td>` : `<td><b>${esc(x)}</b></td>`).join('')}</tr>`).join('')}</tbody></table>`));
       if (c.fig) card.appendChild(figure(c.fig));
       if (c.rhythm) [c.rhythm, c.rhythm2].filter(Boolean).forEach(id2 => { const r = RHYTHMS.find(x => x.id === id2);
-        const box = el(`<div style="display:flex;flex-direction:column;gap:6px"><b class="small">${esc(r.name)} <span class="muted">${esc(r.count)}</span></b><div class="rg">${rhythmGrid(id2)}</div><div class="rcount">${COUNT16.map(x => `<span>${x}</span>`).join('')}</div></div>`);
+        const box = el(`<div style="display:flex;flex-direction:column;gap:6px"><b class="small">${esc(r.name)} <span class="muted">${esc(r.count)}</span></b><div class="rg">${rhythmGrid(id2)}</div><div class="rcount" style="grid-template-columns:repeat(${r.n},1fr)">${rCount(r).map(x => `<span>${x}</span>`).join('')}</div></div>`);
         const b = el(`<button class="btn sm" style="align-self:flex-start">${I.play}들어 보기</button>`);
-        b.onclick = () => { if (Clock.on) { Clock.stop(); return; } b.innerHTML = I.stop + '멈추기'; playRhythm(id2, 72, 2, k => { $('.rg', box).innerHTML = rhythmGrid(id2, k % 16); }, () => { b.innerHTML = I.play + '들어 보기'; $('.rg', box).innerHTML = rhythmGrid(id2); }); };
+        b.onclick = () => { if (Clock.on) { Clock.stop(); return; } b.innerHTML = I.stop + '멈추기'; playRhythm(id2, 72, 2, k => { $('.rg', box).innerHTML = rhythmGrid(id2, k); }, () => { b.innerHTML = I.play + '들어 보기'; $('.rg', box).innerHTML = rhythmGrid(id2); }); };
         box.appendChild(b); card.appendChild(box); });
       if (c.line) { const box = el(`<div style="display:flex;flex-direction:column;gap:8px"><div class="lsteps"></div></div>`);
         const draw = now => $('.lsteps', box).innerHTML = `<div class="rgrid" style="grid-template-columns:repeat(8,1fr)">${c.line.pat.map((r, k) => `<i style="height:40px;display:grid;place-items:center;font-size:13px;font-weight:800;font-style:normal" class="${r ? 'on' : ''}${k === now ? ' now' : ''}">${r || ''}</i>`).join('')}</div><div class="rcount" style="grid-template-columns:repeat(8,1fr)">${['1','&','2','&','3','&','4','&'].map(x => `<span>${x}</span>`).join('')}</div>`;
@@ -596,7 +642,7 @@ function openLesson(id, startPhase) {
       phase = 'drill'; sh.progress(n + 2, n); sh.body.innerHTML = ''; sh.scrollTop();
       const host = el('<div style="display:flex;flex-direction:column;gap:16px"></div>');
       sh.body.append(host);
-      runner = Runner(host, sh.foot, {count:10, passNote:'8개 이상 맞히면 통과', next:() => genFromDrill(L.drill), onDone:res => result(res)});
+      const ctx = {L}; runner = Runner(host, sh.foot, {count:10, passNote:'8개 이상 맞히면 통과', next:() => genFromDrill(L.drill, ctx), onDone:res => result(res)});
     }
     function result(res) {
       Mic.stop(); const pass = res.right >= 8, rec = D.lessons[L.id] || (D.lessons[L.id] = {}), first = pass && !rec.done, stars = starsOf(res.right);
@@ -666,10 +712,11 @@ function playTask(sh, L, onDone) {
   sh.foot.appendChild(b);
 }
 function tapTrainer(rid, bpm0) {
+  if ((RHYTHMS.find(x => x.id === rid) || {}).n !== 16) rid = 'e';
   const r = () => RHYTHMS.find(x => x.id === cur); let cur = rid, taps = [], pat = RHYTHMS.find(x => x.id === rid).s.slice();
   const box = el(`<div style="display:flex;flex-direction:column;gap:12px"></div>`);
   const m = metroBox(bpm0); $('.mb', m).remove(); box.appendChild(m);
-  const chips = el('<div class="chips"></div>'); RHYTHMS.forEach(x => { const c = el(`<button class="chip" aria-pressed="${x.id === cur}">${esc(x.name)}</button>`); c.onclick = () => { cur = x.id; pat = x.s.slice(); $$('.chip', chips).forEach(k => k.setAttribute('aria-pressed', k === c)); grid(-1); }; chips.appendChild(c); });
+  const chips = el('<div class="chips"></div>'); RHYTHMS.filter(x => x.n === 16).forEach(x => { const c = el(`<button class="chip" aria-pressed="${x.id === cur}">${esc(x.name)}</button>`); c.onclick = () => { cur = x.id; pat = x.s.slice(); $$('.chip', chips).forEach(k => k.setAttribute('aria-pressed', k === c)); grid(-1); }; chips.appendChild(c); });
   box.appendChild(chips);
   const g = el('<div><div class="rgrid edit"></div><div class="rcount">' + COUNT16.map(x => `<span>${x}</span>`).join('') + '</div></div>'); box.appendChild(g);
   const grid = now => { $('.rgrid', g).innerHTML = Array.from({length:16}, (_, k) => `<i data-k="${k}" class="${pat.includes(k) ? 'on' : ''}${k % 4 === 0 ? ' beat' : ''}${k === now ? ' now' : ''}"></i>`).join(''); };
@@ -813,17 +860,17 @@ function renderTab() {
 }
 function viewToday(pg) {
   const d = dayRec(), cl = currentLesson(), due = reviewKeys().length, hasItems = Object.keys(D.items).length > 0;
-  const playL = LESSONS.find(l => l.id === d.lastLesson) || [...LESSONS].reverse().find(l => isDone(l.id)) || LESSONS[0];
+  const playL = LESSONS.find(l => l.id === d.lastLesson) || [...LESSONS].reverse().find(l => isDone(l.id)) || cl || LESSONS[0];
   const reviewDone = d.steps.review || due === 0, Lv = levelInfo();
   const totQ = Object.values(D.tot).reduce((a, r) => a + r[1], 0), totR = Object.values(D.tot).reduce((a, r) => a + r[0], 0);
   const doneN = LESSONS.filter(l => isDone(l.id)).length;
   pg.appendChild(el(`<div class="card hero lvl-card"><div class="lvl-badge"><div style="display:flex;flex-direction:column;align-items:center"><b>${Lv.level}</b><span>레벨</span></div></div>
-    <div class="t">${esc(Lv.title)}</div>
+    <div class="t">${esc(Lv.title)} <span class="pill accent" style="vertical-align:middle">${cl ? esc(tierName(cl.unit)) + ' 과정' : '전 과정 완료'}</span></div>
     <div><div class="bar-track"><div class="bar-fill" style="width:${Lv.pct}%"></div></div><div class="spread small muted" style="margin-top:6px"><span class="num" style="font-size:15px">${Lv.into} / ${Lv.need} XP</span><span>다음 레벨까지 ${Lv.need - Lv.into}</span></div></div></div>`));
   pg.appendChild(el(`<div class="stats3"><div><b>${streak()}</b><span>연속 일수</span></div><div><b>${doneN}<span class="muted" style="font-size:16px">/${LESSONS.length}</span></b><span>완료 레슨</span></div><div><b>${totQ ? Math.round(totR / totQ * 100) + '%' : '-'}</b><span>정답률</span></div></div>`));
   const steps = [
     {id:'review', n:1, done:reviewDone, t:'복습', s:due ? '다시 볼 문제 ' + Math.min(due, 10) + '개, 약 3분' : (hasItems ? '오늘 복습할 문제가 없습니다' : '레슨을 풀면 복습 문제가 생깁니다'), go:openReview},
-    {id:'lesson', n:2, done:!!d.steps.lesson, t:cl ? '레슨 ' + (lessonIndex(cl.id) + 1) + '. ' + cl.title : '약한 문제 집중', s:cl ? '설명 읽고 문제 10개, 약 4분' : '모든 레슨 완료. 자주 틀린 문제를 풉니다', go:() => cl ? openLesson(cl.id) : openTool('weak')},
+    {id:'lesson', n:2, done:!!d.steps.lesson, t:cl ? tierName(cl.unit) + ' ' + (LESSONS.filter(l => l.unit === cl.unit).indexOf(cl) + 1) + '. ' + cl.title : '약한 문제 집중', s:cl ? '설명 읽고 문제 10개, 약 4분' : '모든 레슨 완료. 자주 틀린 문제를 풉니다', go:() => cl ? openLesson(cl.id) : openTool('weak')},
     {id:'play', n:3, done:!!d.steps.play, t:'악기로: ' + playL.play.title, s:'메트로놈 ' + playL.play.bpm + ', 약 3분', go:() => openLesson(playL.id, 'play')},
   ];
   const firstOpen = steps.find(x => !x.done);
@@ -839,14 +886,17 @@ function viewToday(pg) {
   shareCard(pg);
 }
 function viewLearn(pg) {
-  pg.appendChild(el('<div><div class="eyebrow">4단원, 15레슨</div><h2 class="page-title">레슨 지도</h2><p class="muted small" style="margin-top:4px">문제 10개 중 8개를 맞히면 다음 레슨이 열립니다. 9개는 별 두 개, 10개는 별 세 개입니다.</p></div>'));
+  pg.appendChild(el(`<div><div class="eyebrow">6등급, ${LESSONS.length}레슨</div><h2 class="page-title">레슨 지도</h2><p class="muted small" style="margin-top:4px">문제 10개 중 8개를 맞히면 다음 레슨이 열립니다. 9개는 별 두 개, 10개는 별 세 개입니다.</p></div>`));
+  const pickRow = el(`<div class="card"><div class="spread"><b>시작 등급</b><span class="small muted">고른 등급부터 열립니다</span></div><div class="chips">${UNITS.map(u => `<button class="chip" data-u="${u.id}" aria-pressed="${startTier() === u.id}">${esc(u.name)}</button>`).join('')}</div></div>`);
+  $$('[data-u]', pickRow).forEach(b => b.onclick = () => { D.settings.startTier = +b.dataset.u; save(); renderTab(); setTimeout(() => { const h = document.getElementById('tier-' + b.dataset.u); if (h) h.scrollIntoView({behavior:'smooth', block:'start'}); }, 50); });
+  pg.appendChild(pickRow);
   const cl = currentLesson(), pos = ['', 'r', '', 'l']; let k = 0;
   UNITS.forEach(u => { const ls = LESSONS.filter(l => l.unit === u.id), dn = ls.filter(l => isDone(l.id)).length;
-    pg.appendChild(el(`<div class="unit-head"><span class="no">${u.id}</span><div><b>${esc(u.name)}</b><span>${esc(u.sub)}</span></div><span class="cnt">${dn}/${ls.length}</span></div>`));
+    pg.appendChild(el(`<div class="unit-head" id="tier-${u.id}" style="scroll-margin-top:70px"><span class="no">${u.id}</span><div><b>${esc(u.name)}</b><span>${esc(u.sub)}</span></div><span class="cnt">${dn}/${ls.length}</span></div>`));
     const path = el('<div class="path"></div>');
-    ls.forEach(l => { const done = isDone(l.id), open = isOpen(l), cur = cl && cl.id === l.id, rec = D.lessons[l.id] || {};
-      const n = el(`<button class="node ${pos[k++ % 4]}${done ? ' done' : ''}${cur ? ' current' : ''}${!open ? ' locked' : ''}" aria-label="${lessonIndex(l.id) + 1}. ${esc(l.title)}">${cur ? '<span class="bubble">지금 할 레슨</span>' : ''}<span class="disc">${done ? I.check : !open ? I.lock : lessonIndex(l.id) + 1}</span><span class="nt">${esc(l.title)}</span>${done ? starsHtml(rec.stars || starsOf(rec.best || 0)) : ''}</button>`);
-      n.onclick = () => open ? openLesson(l.id) : toast('앞 레슨을 통과하면 열립니다. 기록 탭에서 모든 레슨을 열 수도 있습니다');
+    ls.forEach((l, j) => { const done = isDone(l.id), open = isOpen(l), cur = cl && cl.id === l.id, rec = D.lessons[l.id] || {};
+      const n = el(`<button class="node ${pos[k++ % 4]}${done ? ' done' : ''}${cur ? ' current' : ''}${!open ? ' locked' : ''}" aria-label="${esc(u.name)} ${j + 1}. ${esc(l.title)}">${cur ? '<span class="bubble">지금 할 레슨</span>' : ''}<span class="disc">${done ? I.check : !open ? I.lock : j + 1}</span><span class="nt">${esc(l.title)}</span>${done ? starsHtml(rec.stars || starsOf(rec.best || 0)) : ''}</button>`);
+      n.onclick = () => open ? openLesson(l.id) : toast('앞 레슨을 통과하면 열립니다. 위의 시작 등급에서 더 높은 등급을 고를 수도 있습니다');
       path.appendChild(n); });
     pg.appendChild(path); });
 }
@@ -964,16 +1014,19 @@ function onboarding() {
     {h:'베이스를 처음 잡았다면', p:'줄 이름부터 코드톤과 리듬까지, 15개 레슨으로 차근차근 익힙니다. 설명은 원하는 만큼 천천히 읽고 넘기세요.', art:ART.board},
     {h:'하루 10분, 세 단계', p:'복습, 레슨, 악기 연습 순서로 합니다. 틀린 문제는 다음 날 다시 나와서 약한 자리가 채워집니다. 맞힐수록 경험치가 쌓여 레벨이 오릅니다.', art:ART.loop},
     {h:'베이스로 직접 쳐서 확인', p:'마이크를 켜면 화면을 누르는 대신 실제로 친 음으로 정답을 확인합니다. 튜너도 같은 마이크를 씁니다. 마이크 허락은 처음 쓸 때 따로 묻습니다.', art:ART.mic},
+    {h:'어디서 시작할까요?', p:'베이스를 처음 잡는다면 입문부터 시작하세요. 이미 칠 줄 알면 맞는 등급을 고르면 그 등급부터 열립니다. 나중에 배우기 탭에서 바꿀 수 있습니다.', tiers:true},
     {h:'마음에 드는 테마를 고르세요', p:'나중에 기록 탭에서 언제든 바꿀 수 있습니다.', themes:true},
   ];
   let i = 0; const o = el('<div class="onb" role="dialog" aria-label="처음 사용 안내"></div>'); document.body.appendChild(o);
-  const done = () => { D.onboarded = true; save(); o.remove(); };
+  const done = () => { D.onboarded = true; save(); o.remove(); renderTab(); };
   const draw = () => { const s = slides[i];
-    const pick = s.themes ? `<div class="themes">${Object.keys(THEMES).map(k => `<button class="theme-pick" data-t="${k}" aria-pressed="${D.settings.theme === k}"><i style="background:${THEMES[k].prev}"></i>${THEMES[k].name}</button>`).join('')}</div>` : '';
+    const tpick = s.tiers ? `<div class="chips" style="margin-top:10px">${UNITS.map(u => `<button class="chip" data-tier="${u.id}" aria-pressed="${startTier() === u.id}">${esc(u.name)}</button>`).join('')}</div><p class="small" style="margin-top:8px">${esc(UNITS.find(u => u.id === startTier()).sub)}</p>` : '';
+    const pick = tpick + (s.themes ? `<div class="themes">${Object.keys(THEMES).map(k => `<button class="theme-pick" data-t="${k}" aria-pressed="${D.settings.theme === k}"><i style="background:${THEMES[k].prev}"></i>${THEMES[k].name}</button>`).join('')}</div>` : '');
     o.innerHTML = `<div class="art">${s.art || ''}</div><h2>${esc(s.h)}</h2><p>${esc(s.p)}</p>${pick}<div class="dots">${slides.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div><div class="acts"><button class="btn" id="onb-skip">${i ? '이전' : '건너뛰기'}</button><button class="btn primary" id="onb-next">${i === slides.length - 1 ? '시작하기' : '다음'}</button></div>`;
     $('#onb-skip', o).onclick = () => { if (i) { i--; draw(); } else done(); };
     $('#onb-next', o).onclick = () => { if (i < slides.length - 1) { i++; draw(); } else done(); };
-    $$('.theme-pick', o).forEach(b => b.onclick = () => { D.settings.theme = b.dataset.t; save(); applyTheme(); draw(); }); };
+    $$('.theme-pick', o).forEach(b => b.onclick = () => { D.settings.theme = b.dataset.t; save(); applyTheme(); draw(); });
+    $$('[data-tier]', o).forEach(b => b.onclick = () => { D.settings.startTier = +b.dataset.tier; save(); draw(); }); };
   draw();
 }
 applyTheme();
