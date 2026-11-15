@@ -921,6 +921,7 @@ function instSwitch(pg) {
 }
 function viewToday(pg) {
   instSwitch(pg);
+  if (IN_ARTIFACT) moveCard(pg);
   const d = dayRec(), cl = currentLesson(), due = reviewKeys().length, hasItems = Object.keys(D.items).length > 0;
   const ds = stepsOf(d), playL = LESSONS.find(l => l.id === ds.last) || [...LESSONS].reverse().find(l => isDone(l.id)) || cl || LESSONS[0];
   const reviewDone = ds.review || due === 0, Lv = levelInfo();
@@ -1038,8 +1039,32 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instal
 window.addEventListener('appinstalled', () => { installEvt = null; $('#install').hidden = true; toast('홈 화면에 설치했습니다'); });
 async function doInstall() { if (!installEvt) return; installEvt.prompt(); try { await installEvt.userChoice; } catch (e) {} installEvt = null; $('#install').hidden = true; renderTab(); }
 $('#install').onclick = doInstall;
+/* Claude 아티팩트 안에서 열렸을 때: 진짜 앱 주소로 옮기기 */
+const IN_ARTIFACT = (location.hostname !== 'dhtpxor.github.io' && !/^(localhost|127\.)/.test(location.hostname)) || /[?&]artifact=1/.test(location.search);
+const b64enc = t => btoa(unescape(encodeURIComponent(t))), b64dec = t => decodeURIComponent(escape(atob(t)));
+function moveLink() { return APP_URL + '#import=' + b64enc(JSON.stringify(D)); }
+function moveCard(pg) {
+  const c = el(`<div class="card move-card"><b>피크 아이콘 앱으로 설치하세요</b><span class="small muted">지금 화면은 Claude 안에서 열린 미리보기라 설치하면 스피커 아이콘이 붙습니다. 아래 버튼을 누르면 진짜 앱 주소가 지금까지의 진도를 그대로 가지고 열립니다. 거기서 크롬 메뉴의 "홈 화면에 추가"를 누르세요.</span><a class="btn primary block" target="_blank" rel="noopener">진도 가지고 앱 주소로 열기</a><button class="btn sm">주소 복사하기</button></div>`);
+  const a = $('a', c); a.href = moveLink(); a.onclick = () => { a.href = moveLink(); };
+  $('button', c).onclick = async () => { const u = moveLink(); try { await navigator.clipboard.writeText(u); toast('주소를 복사했습니다. 크롬 주소창에 붙여 넣으세요'); }
+    catch (e) { modal('주소 복사', '<p class="small muted">아래 글을 길게 눌러 모두 복사한 뒤 크롬 주소창에 붙여 넣으세요.</p><textarea readonly>' + esc(u) + '</textarea>', [['닫기']]); } };
+  pg.appendChild(c);
+}
+/* 옮기기 주소로 열렸을 때 진도 받기 */
+function checkImport() {
+  const h = location.hash; if (!h.startsWith('#import=')) return;
+  let x = null; try { x = JSON.parse(b64dec(h.slice(8))); } catch (e) {}
+  history.replaceState(null, '', '#today'); tab = 'today';
+  if (!x || !(x.by || x.lessons)) { toast('옮기기 주소가 올바르지 않습니다'); renderTab(); return; }
+  const apply = () => { const theme = D.settings.theme; D = Object.assign(fresh(), x, {settings:Object.assign(fresh().settings, x.settings || {}, {instTip:true})}); D.onboarded = true;
+    bindInst(D.inst || 'bass'); save(); applyTheme(); const o = $('.onb'); if (o) o.remove(); renderTab(); updateChip(); toast('진도를 옮겨 왔습니다. 이제 홈 화면에 추가하세요'); return true; };
+  const has = Object.values(D.by || {}).some(b => Object.keys(b.lessons || {}).length || Object.keys(b.items || {}).length);
+  if (!has) apply();
+  else modal('진도 옮겨 오기', '<p class="small muted">이 기기에 이미 기록이 있습니다. 가져온 진도로 바꿀까요? 지금 기록은 지워집니다.</p>', [['가져온 진도로 바꾸기', apply], ['지금 기록 유지']]);
+}
 function installCard(pg) {
   if (standalone()) return;
+  if (IN_ARTIFACT) return;
   if (installEvt) { const c = el(`<div class="card"><b>폰에 앱으로 설치하기</b><span class="small muted">홈 화면 아이콘으로 바로 열리고, 인터넷이 없어도 쓸 수 있습니다.</span><button class="btn primary">설치하기</button></div>`); $('button', c).onclick = doInstall; pg.appendChild(c); }
   else if (isIOS()) pg.appendChild(el('<div class="card"><b>아이폰에 설치하기</b><span class="small muted">Safari 아래쪽의 공유 버튼을 누르고 "홈 화면에 추가"를 고르세요.</span></div>'));
   else if (!('serviceWorker' in navigator) || location.protocol !== 'https:') {}
@@ -1055,6 +1080,7 @@ function route() {
   if (h.startsWith('lesson-')) { const id = h.slice(7); if (LESSONS.some(l => l.id === id) && isOpen(LESSONS.find(l => l.id === id))) openLesson(id); else location.replace('#learn'); return; }
   if (h.startsWith('tool-')) { openTool(h.slice(5)); return; }
   if (h === 'review') { openReview(); return; }
+  if (h.startsWith('import=')) { checkImport(); return; }
   location.replace('#today');
 }
 window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (sheetClose && (TABS.some(t => t[0] === h) || !h)) { sheetClose(); } route(); });
@@ -1101,6 +1127,7 @@ applyTheme();
 $('#sharebtn').innerHTML = I.share; $('#sharebtn').onclick = shareApp;
 $('#instchip').onclick = () => modal('악기 바꾸기', '<p class="small muted">진도와 복습은 악기마다 따로 저장됩니다.</p><div class="seg" id="m-inst"><button data-v="bass" aria-pressed="' + (D.inst === 'bass') + '">베이스</button><button data-v="guitar" aria-pressed="' + (D.inst === 'guitar') + '">일렉기타</button></div>', [['닫기']]);
 document.addEventListener('click', e => { const b = e.target.closest('#m-inst [data-v]'); if (!b) return; D.settings.instTip = true; setInst(b.dataset.v); updateChip(); const back = b.closest('.modal-back'); if (back) back.remove(); renderTab(); toast(instName() + '로 바꿨습니다'); });
+checkImport();
 if (!location.hash) history.replaceState(null, '', '#today');
 tab = TABS.some(t => t[0] === location.hash.slice(1)) ? location.hash.slice(1) : 'today';
 renderTab();
