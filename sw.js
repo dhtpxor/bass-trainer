@@ -1,6 +1,6 @@
 /* 오프라인 동작: 앱 파일은 미리 저장하고, 열 때마다 뒤에서 새 버전으로 갈아 둔다 */
-const VERSION = 'bass-trainer-v6';
-const SHELL = ['./', 'index.html', 'styles.css', 'theory.js', 'content.js', 'app.js', 'manifest.webmanifest',
+const VERSION = 'bass-trainer-v7';
+const SHELL = ['./', 'index.html', 'styles.css', 'theory.js', 'content.js', 'guitar.js', 'app.js', 'manifest.webmanifest',
   'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION && k !== 'bass-fonts').map(k => caches.delete(k)))).then(() => self.clients.claim())); });

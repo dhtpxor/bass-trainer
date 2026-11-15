@@ -1,8 +1,10 @@
-/* 베이스 트레이너: 화면, 저장, 소리, 마이크, 문제 */
+/* 베이스와 기타 트레이너: 화면, 저장, 소리, 마이크, 문제 */
 "use strict";
 const {STR, SHARP, FLAT, NAT, pcAt, midiAt, nm, both, isNat, strName, posName, allPos, IVL, IVL_SHORT, IVL_FEEL, shapes,
   SCALES, scaleFlat, spell, CHORDS, chordById, ROOT_NAMES, rootFlat, RHYTHMS} = TH;
-const {UNITS, LESSONS} = CT;
+let UNITS = CT.UNITS, LESSONS = CT.LESSONS;
+const NS = () => STR.length;
+const instName = () => TH.inst().name;
 
 /* ---------- 작은 도구 ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -51,10 +53,21 @@ const starsHtml = n => `<div class="stars" aria-label="별 ${n}개">${[0,1,2].ma
 
 /* ---------- 저장 ---------- */
 const KEY = 'bassTrainer.v1';
-function fresh() { return {lessons:{}, items:{}, days:{}, tot:{}, xp:0, onboarded:false, settings:{sound:true, orient:'auto', unlockAll:false, mic:false, theme:'stage', startTier:1}}; }
+function fresh() { return {lessons:{}, items:{}, days:{}, tot:{}, xp:0, onboarded:false, inst:'bass', by:{}, settings:{sound:true, orient:'auto', unlockAll:false, mic:false, theme:'stage', startTier:1}}; }
 let D = fresh();
-try { const x = JSON.parse(localStorage.getItem(KEY)); if (x && x.lessons) D = Object.assign(fresh(), x, {settings:Object.assign(fresh().settings, x.settings || {})}); } catch (e) {}
-function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) {} }
+try { const x = JSON.parse(localStorage.getItem(KEY)); if (x && (x.lessons || x.by)) D = Object.assign(fresh(), x, {settings:Object.assign(fresh().settings, x.settings || {})}); } catch (e) {}
+function save() { try { const {lessons, items, tot, ...rest} = D; localStorage.setItem(KEY, JSON.stringify(rest)); } catch (e) {} }
+/* 악기마다 진도, 복습 문제, 정답 기록, 시작 등급을 따로 둔다 */
+function bindInst(id) {
+  if (!D.by) D.by = {};
+  if (!D.by.bass && D.lessons && Object.keys(D.lessons).length + Object.keys(D.items || {}).length) D.by.bass = {lessons:D.lessons, items:D.items || {}, tot:D.tot || {}, startTier:D.settings.startTier || 1};
+  if (!['bass','guitar'].includes(id)) id = 'bass';
+  const b = D.by[id] || (D.by[id] = {lessons:{}, items:{}, tot:{}, startTier:1});
+  D.inst = id; D.lessons = b.lessons; D.items = b.items; D.tot = b.tot;
+  TH.setInstrument(id); const set = CT.sets[id] || CT.sets.bass; UNITS = set.UNITS; LESSONS = set.LESSONS;
+}
+function setInst(id) { bindInst(id); save(); }
+bindInst(D.inst || 'bass');
 const today = () => TH.dayKey();
 function dayRec(k = today()) { return D.days[k] || (D.days[k] = {steps:{}, q:{}}); }
 const SKILL_NAMES = {basics:'기초', notes:'음 위치', intervals:'음정', chords:'코드톤', scales:'스케일', rhythm:'리듬', tech:'지식과 주법'};
@@ -64,9 +77,10 @@ function record(skill, key, ok) {
   if (key) D.items[key] = TH.srsUpdate(D.items[key], ok, today());
   save();
 }
-function setStep(name) { const d = dayRec(); d.steps[name] = true; checkDay(); save(); }
+function stepsOf(d = dayRec()) { if (!d.st) d.st = {}; if (d.steps && Object.keys(d.steps).length && !d.st.bass) { d.st.bass = d.steps; } return d.st[D.inst] || (d.st[D.inst] = {}); }
+function setStep(name) { const d = dayRec(); stepsOf(d)[name] = true; checkDay(); save(); }
 function checkDay() {
-  const d = dayRec(); const st = d.steps;
+  const d = dayRec(); const st = stepsOf(d);
   const reviewOk = st.review || reviewKeys().length === 0;
   if (reviewOk && st.lesson && st.play && !d.done) { d.done = true; save(); addXP(20); toast('오늘 연습을 모두 마쳤습니다. 보너스 20 XP'); }
 }
@@ -77,13 +91,13 @@ function streak() {
   return n;
 }
 /* 경험치와 레벨: 레벨 L이 되려면 100 x L(L-1)/2 XP */
-const LV_TITLES = [[1,'처음 잡은 베이스'],[3,'연습실 단골'],[5,'합주 준비 완료'],[7,'세션 연주자'],[10,'그루브 마스터']];
+const LV_TITLES = [[1,'첫 줄을 튕긴 날'],[3,'연습실 단골'],[5,'합주 준비 완료'],[7,'세션 연주자'],[10,'그루브 마스터']];
 function levelInfo(xp = D.xp || 0) {
   const level = Math.floor((Math.sqrt(1 + 8 * xp / 100) - 1) / 2) + 1, base = 100 * (level - 1) * level / 2, next = 100 * level * (level + 1) / 2;
   const title = LV_TITLES.filter(t => level >= t[0]).pop()[1];
   return {level, into:xp - base, need:next - base, pct:Math.round((xp - base) / (next - base) * 100), title};
 }
-function updateChip() { const c = $('#lvchip'); if (c) c.innerHTML = '<span class="led amber"></span>Lv ' + levelInfo().level; }
+function updateChip() { const c = $('#lvchip'); if (c) c.innerHTML = '<span class="led amber"></span>Lv ' + levelInfo().level; const ic = $('#instchip'); if (ic) ic.textContent = instName(); }
 function xpPop(t) { const e = el(`<div class="xp-pop">${esc(t)}</div>`); document.body.appendChild(e); setTimeout(() => e.remove(), 1100); }
 function addXP(n, pop) {
   const before = levelInfo().level; D.xp = (D.xp || 0) + n; save(); updateChip();
@@ -92,7 +106,8 @@ function addXP(n, pop) {
 }
 const lessonIndex = id => LESSONS.findIndex(l => l.id === id);
 const isDone = id => !!(D.lessons[id] && D.lessons[id].done);
-const startTier = () => D.settings.startTier || 1;
+const startTier = () => (D.by && D.by[D.inst] && D.by[D.inst].startTier) || 1;
+function setStartTier(t) { D.by[D.inst].startTier = t; save(); }
 function currentLesson() { return LESSONS.find(l => l.unit >= startTier() && !isDone(l.id)) || LESSONS.find(l => !isDone(l.id)) || null; }
 function isOpen(l) {
   if (D.settings.unlockAll || isDone(l.id) || l.unit < startTier()) return true;
@@ -113,8 +128,9 @@ const AU = {
     if (!D.settings.sound) return; const a = this.get(); if (!a) return;
     try { const t = when || a.currentTime, f = 440 * Math.pow(2, (midi + 12 - 69) / 12);
       const g = a.createGain(), lp = a.createBiquadFilter(), o1 = a.createOscillator(), o2 = a.createOscillator(), g2 = a.createGain();
-      o1.type = 'sawtooth'; o1.frequency.value = f; o2.type = 'sine'; o2.frequency.value = f / 2; g2.gain.value = .6;
-      lp.type = 'lowpass'; lp.Q.value = 2; lp.frequency.setValueAtTime(1800, t); lp.frequency.exponentialRampToValueAtTime(280, t + dur * .8);
+      const gtr = D.inst === 'guitar';
+      o1.type = 'sawtooth'; o1.frequency.value = f; o2.type = gtr ? 'triangle' : 'sine'; o2.frequency.value = gtr ? f * 2 : f / 2; g2.gain.value = gtr ? .25 : .6;
+      lp.type = 'lowpass'; lp.Q.value = 2; lp.frequency.setValueAtTime(gtr ? 4200 : 1800, t); lp.frequency.exponentialRampToValueAtTime(gtr ? 900 : 280, t + dur * .8);
       g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.42, t + .008); g.gain.exponentialRampToValueAtTime(.18, t + .12); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
       o1.connect(lp); o2.connect(g2); g2.connect(lp); lp.connect(g); g.connect(a.destination);
       o1.start(t); o2.start(t); o1.stop(t + dur + .05); o2.stop(t + dur + .05);
@@ -126,6 +142,8 @@ const AU = {
       g.gain.setValueAtTime(accent ? .16 : .1, when); g.gain.exponentialRampToValueAtTime(.0001, when + .035);
       o.connect(g); g.connect(a.destination); o.start(when); o.stop(when + .05); } catch (e) {}
   },
+  strum(id, down = true) { const sh = TH.GSHAPES[id]; if (!sh) return; const t0 = this.now() + .05; let k = 0;
+    const idx = [0,1,2,3,4,5]; (down ? idx : idx.reverse()).forEach(s => { if (sh.f[s] >= 0) this.pluck(midiAt(s, sh.f[s]), t0 + (k++) * .028, 1.1); }); },
   seq(list, gap = .42, delay = .05) { const t0 = this.now() + delay; list.forEach((p, i) => this.pluck(midiAt(p[0], p[1]), t0 + i * gap)); return list.length * gap; },
 };
 
@@ -165,7 +183,7 @@ const Mic = {
   },
   tick() {
     this.an.getFloatTimeDomainData(this.buf);
-    const r = TH.detectPitch(this.buf, AU.ctx.sampleRate);
+    const r = TH.detectPitch(this.buf, AU.ctx.sampleRate, TH.inst().minF, TH.inst().maxF);
     if (!r || r.clarity < .82) { this.hist = []; this.cb && this.cb(null); return; }
     const m = TH.midiFromFreq(r.freq), mid = Math.round(m);
     this.hist.push(mid); if (this.hist.length > 3) this.hist.shift();
@@ -190,48 +208,49 @@ function board(o) {
   const v = (o.orient || orient()) === 'v';
   const first = o.from === 0 ? 1 : o.from, rows = o.to - first + 1;
   let W, H, P;
-  if (v) { const SX = 66, RH = o.small ? 34 : 38, top = 36, left = 50;
+  const N = NS(), last = N - 1;
+  if (v) { const SX = N > 4 ? 46 : 66, RH = o.small ? 34 : 38, top = 36, left = N > 4 ? 44 : 50;
     P = (s, f) => ({x:left + s * SX, y:f === 0 && o.from === 0 ? 18 : top + (f - first + .5) * RH});
-    W = left + 3 * SX + 40; H = top + rows * RH + 8;
+    W = left + last * SX + 40; H = top + rows * RH + 8;
     var cell = {w:SX, h:RH}, geo = {top, left, RH, SX};
-  } else { const CW = o.small ? 48 : 56, RH = 40, top = 12, left = o.from === 0 ? 44 : 24;
-    P = (s, f) => ({x:f === 0 && o.from === 0 ? 20 : left + (f - first + .5) * CW, y:top + (3 - s) * RH + RH / 2});
-    W = left + rows * CW + 10; H = top + 4 * RH + 24;
+  } else { const CW = o.small ? 48 : 56, RH = N > 4 ? 32 : 40, top = 12, left = o.from === 0 ? 44 : 24;
+    P = (s, f) => ({x:f === 0 && o.from === 0 ? 20 : left + (f - first + .5) * CW, y:top + (last - s) * RH + RH / 2});
+    W = left + rows * CW + 10; H = top + N * RH + 24;
     var cell = {w:CW, h:RH}, geo = {top, left, CW, RH};
   }
-  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="베이스 지판 그림">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${instName()} 지판 그림">`;
   if (v) {
-    const {top, left, RH, SX} = geo, x0 = left - SX / 2 + 6, x1 = left + 3 * SX + SX / 2 - 6;
+    const {top, left, RH, SX} = geo, x0 = left - SX / 2 + 6, x1 = left + last * SX + SX / 2 - 6;
     s += `<rect x="${x0}" y="${top}" width="${x1 - x0}" height="${rows * RH}" rx="3" fill="var(--wood)"/>`;
     for (let f = first; f <= o.to; f++) { const y = top + (f - first + .5) * RH, cx = (x0 + x1) / 2;
       if ([3,5,7,9].includes(f)) s += `<circle cx="${cx}" cy="${y}" r="5" fill="var(--inlay)"/>`;
-      if (f === 12) s += `<circle cx="${left + SX * .5}" cy="${y}" r="5" fill="var(--inlay)"/><circle cx="${left + SX * 2.5}" cy="${y}" r="5" fill="var(--inlay)"/>`;
+      if (f === 12) s += `<circle cx="${left + SX * (last / 2 - 1)}" cy="${y}" r="5" fill="var(--inlay)"/><circle cx="${left + SX * (last / 2 + 1)}" cy="${y}" r="5" fill="var(--inlay)"/>`;
       s += `<text x="16" y="${y}" font-size="13" fill="var(--muted)" text-anchor="middle" dominant-baseline="central">${f}</text>`; }
     for (let f = first - 1; f <= o.to; f++) { const y = top + (f - first + 1) * RH, nut = f === 0;
       s += `<rect x="${x0}" y="${y - (nut ? 4 : 1)}" width="${x1 - x0}" height="${nut ? 6 : 2}" fill="${nut ? 'var(--nut)' : 'var(--fret)'}"/>`; }
-    for (let k = 0; k < 4; k++) { const x = left + k * SX, w = 4.2 - k * .7, hi = o.hiS === k;
+    for (let k = 0; k < N; k++) { const x = left + k * SX, w = N > 4 ? 3.2 - k * .38 : 4.2 - k * .7, hi = o.hiS === k;
       s += `<rect x="${x - w / 2}" y="${top}" width="${w}" height="${rows * RH}" fill="${hi ? 'var(--ask)' : 'var(--string)'}"/>`;
       if (o.from !== 0) s += `<text x="${x}" y="18" font-size="15" font-weight="800" fill="${hi ? 'var(--ask)' : 'var(--muted)'}" text-anchor="middle" dominant-baseline="central">${STR[k].n}</text>`;
       else if (!o.dots.some(d => d.s === k && d.f === 0)) s += `<text x="${x}" y="18" font-size="15" font-weight="800" fill="${hi ? 'var(--ask)' : 'var(--muted)'}" text-anchor="middle" dominant-baseline="central">${STR[k].n}</text>`; }
   } else {
-    const {top, left, CW, RH} = geo, y0 = top + 4, y1 = top + 4 * RH - 4, x0 = left, x1 = left + rows * CW;
+    const {top, left, CW, RH} = geo, y0 = top + 4, y1 = top + N * RH - 4, x0 = left, x1 = left + rows * CW;
     s += `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" rx="3" fill="var(--wood)"/>`;
     for (let f = first; f <= o.to; f++) { const x = left + (f - first + .5) * CW;
       if ([3,5,7,9].includes(f)) s += `<circle cx="${x}" cy="${(y0 + y1) / 2}" r="5" fill="var(--inlay)"/>`;
-      if (f === 12) s += `<circle cx="${x}" cy="${top + RH}" r="5" fill="var(--inlay)"/><circle cx="${x}" cy="${top + 3 * RH}" r="5" fill="var(--inlay)"/>`;
+      if (f === 12) s += `<circle cx="${x}" cy="${top + RH * (N / 2 - 1)}" r="5" fill="var(--inlay)"/><circle cx="${x}" cy="${top + RH * (N / 2 + 1)}" r="5" fill="var(--inlay)"/>`;
       s += `<text x="${x}" y="${H - 9}" font-size="13" fill="var(--muted)" text-anchor="middle" dominant-baseline="central">${f}</text>`; }
     for (let f = first - 1; f <= o.to; f++) { const x = left + (f - first + 1) * CW, nut = f === 0;
       s += `<rect x="${x - (nut ? 4 : 1)}" y="${y0}" width="${nut ? 6 : 2}" height="${y1 - y0}" fill="${nut ? 'var(--nut)' : 'var(--fret)'}"/>`; }
-    for (let k = 0; k < 4; k++) { const y = top + (3 - k) * RH + RH / 2, w = 4.2 - k * .7, hi = o.hiS === k;
+    for (let k = 0; k < N; k++) { const y = top + (last - k) * RH + RH / 2, w = N > 4 ? 3.2 - k * .38 : 4.2 - k * .7, hi = o.hiS === k;
       s += `<rect x="${x0}" y="${y - w / 2}" width="${x1 - x0}" height="${w}" fill="${hi ? 'var(--ask)' : 'var(--string)'}"/>`;
       if (!(o.from === 0 && o.dots.some(d => d.s === k && d.f === 0))) s += `<text x="${o.from === 0 ? 20 : 10}" y="${y}" font-size="15" font-weight="800" fill="${hi ? 'var(--ask)' : 'var(--muted)'}" text-anchor="middle" dominant-baseline="central">${STR[k].n}</text>`; }
   }
-  const r = o.small ? 13 : 15;
+  const r = N > 4 ? (o.small ? 12 : 14) : (o.small ? 13 : 15);
   o.dots.forEach(d => { if (d.f < o.from && !(d.f === 0 && o.from === 0)) return; if (d.f > o.to) return;
     const p = P(d.s, d.f), [fill, ink] = DOT[d.c || 'tone'], t = d.t == null ? '' : String(d.t);
     const fs = t.length > 2 ? 10 : t.length > 1 ? 12 : 13;
     s += `<g class="dot${d.pulse ? ' pulse' : ''}"><circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${fill}" stroke="${d.c === 'ghost' ? 'var(--muted)' : 'var(--wood)'}" stroke-width="2"/><text x="${p.x}" y="${p.y}" font-size="${fs}" style="fill:${ink}">${esc(t)}</text></g>`; });
-  if (o.tap) for (let k = 0; k < 4; k++) for (let f = o.from === 0 ? 0 : o.from; f <= o.to; f++) {
+  if (o.tap) for (let k = 0; k < N; k++) for (let f = o.from === 0 ? 0 : o.from; f <= o.to; f++) {
     const p = P(k, f); s += `<rect class="hit" data-s="${k}" data-f="${f}" x="${p.x - cell.w / 2}" y="${p.y - cell.h / 2}" width="${cell.w}" height="${cell.h}"/>`; }
   s += '</svg>';
   const box = el(`<div class="board ${v ? 'v' : 'h'}">${s}</div>`);
@@ -242,13 +261,13 @@ function board(o) {
 /* ---------- 레슨 그림 ---------- */
 function nearPos(midi, s0, f0, lo, hi) {
   const out = [];
-  for (let s = 0; s < 4; s++) for (let f = Math.max(0, lo); f <= Math.min(12, hi); f++) if (midiAt(s, f) === midi && !(s === s0 && f === f0)) out.push({s, f});
+  for (let s = 0; s < NS(); s++) for (let f = Math.max(0, lo); f <= Math.min(12, hi); f++) if (midiAt(s, f) === midi && !(s === s0 && f === f0)) out.push({s, f});
   return out;
 }
 function figure(fig) {
   const wrap = el('<div class="figure"></div>'); let o = {dots:[]}, legend = [];
   const add = (b, cap) => { const c = el('<div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:4px"></div>'); if (cap) c.appendChild(el(`<b class="small">${esc(cap)}</b>`)); c.appendChild(b); wrap.appendChild(c); };
-  if (fig.k === 'open') { o = {from:0, to:4, dots:[0,1,2,3].map(s => ({s, f:0, t:STR[s].n}))}; }
+  if (fig.k === 'open') { o = {from:0, to:4, dots:STR.map((x, s) => ({s, f:0, t:x.n}))}; }
   else if (fig.k === 'string') { o.from = 0; o.to = fig.maxF;
     for (let f = 0; f <= fig.maxF; f++) { const pc = pcAt(fig.s, f); if (isNat(pc)) o.dots.push({s:fig.s, f, t:nm(pc)}); else if (fig.all) o.dots.push({s:fig.s, f, t:nm(pc), c:'dim'}); }
     o.hiS = fig.s; legend = fig.all ? [['tone','자연음'],['dim','샵 음']] : []; }
@@ -272,15 +291,22 @@ function figure(fig) {
       add(board(Object.assign(mk(fig.id), {small:true})), ROOT_NAMES[fig.root] + chordById(fig.id).suf + ' (' + chordById(fig.id).read + ')'); return wrap; }
     o = mk(fig.id); legend = [['root','루트(R)'],['tone','코드톤']]; }
   else if (fig.k === 'scale') { const sc = SCALES.find(x => x.id === fig.id); o = {from:Math.max(0, fig.from - 0), to:fig.to, dots:[]};
-    for (let s = 0; s < 4; s++) { if (fig.strings && !fig.strings.includes(s)) continue;
+    for (let s = 0; s < NS(); s++) { if (fig.strings && !fig.strings.includes(s)) continue;
       for (let f = fig.from; f <= fig.to; f++) { const i = sc.st.indexOf((pcAt(s, f) - fig.root + 12) % 12); if (i >= 0) o.dots.push({s, f, t:sc.lb[i], c:i ? 'tone' : 'root'}); } }
     legend = [['root','루트(1)'],['tone','스케일 음']]; }
+  else if (fig.k === 'shape') { (fig.ids || [fig.id]).forEach(id => { const sh = TH.GSHAPES[id]; add(board(Object.assign(shapeBoard(id), {small:!!fig.ids})), id + ' 코드'); }); 
+    wrap.appendChild(el(`<div class="legend"><span><i style="background:${DOT.root[0]}"></i>근음</span><span><i style="background:${DOT.tone[0]}"></i>누르는 자리</span><span>× 치지 않는 줄</span></div>`)); return wrap; }
   else if (fig.k === 'pts') { o = {from:fig.from, to:fig.to, dots:fig.pts.map(([s, f, t, c]) => ({s, f, t, c:c || 'tone'}))}; }
   else if (fig.k === 'appr') { o = {from:2, to:7, dots:[{s:fig.from[0], f:fig.from[1], t:'A', c:'root'}, {s:1, f:4, t:'C#', c:'ask'}, {s:fig.to[0], f:fig.to[1], t:'D', c:'tone'}]};
     legend = [['root','지금 코드 A'],['ask','접근음 C#'],['tone','다음 코드 D']]; }
   add(board(o));
   if (legend.length) wrap.appendChild(el(`<div class="legend">${legend.map(([c, t]) => `<span><i style="background:${DOT[c][0]};border:1px solid var(--line)"></i>${esc(t)}</span>`).join('')}</div>`));
   return wrap;
+}
+function shapeBoard(id) {
+  const sh = TH.GSHAPES[id], max = Math.max(4, ...sh.f) , dots = [];
+  sh.f.forEach((f, s) => { if (f < 0) dots.push({s, f:0, t:'×', c:'ghost'}); else { const pc = pcAt(s, f); dots.push({s, f, t:nm(pc, [5,10,3,8,1].includes(sh.root)), c:pc === sh.root ? 'root' : 'tone'}); } });
+  return {from:0, to:max + 1 > 5 ? max + 1 : 5, dots, orient:'v'};
 }
 function rhythmGrid(id, nowIdx) {
   const r = RHYTHMS.find(x => x.id === id);
@@ -290,7 +316,7 @@ const COUNT16 = ['1','e','&','a','2','e','&','a','3','e','&','a','4','e','&','a'
 const rCount = r => r.cnt || COUNT16;
 function playRhythm(id, bpm, bars, ui, onstop) {
   const r = RHYTHMS.find(x => x.id === id);
-  Clock.start({bpm, sub:r.sub, total:bars ? bars * r.n : 0, tick:(n, t) => { const k = n % r.n; if (r.acc.includes(k)) AU.click(t, k === 0); if (r.s.includes(k)) AU.pluck(28, t, .3); }, ui:ui ? (n => ui(n % r.n)) : null, onstop});
+  Clock.start({bpm, sub:r.sub, total:bars ? bars * r.n : 0, tick:(n, t) => { const k = n % r.n; if (r.acc.includes(k)) AU.click(t, k === 0); if (r.s.includes(k)) AU.pluck(TH.inst().low, t, .3); }, ui:ui ? (n => ui(n % r.n)) : null, onstop});
 }
 const LINE_OFF = {R:0, 5:7, 8:12, 7:10, 3:4};
 function playLine(pat, rootMidi, bpm, ui, onstop) {
@@ -307,17 +333,17 @@ function countUp(s, f) {
   else { const m = [3,5,7].find(x => Math.abs(x - f) <= 2 && x !== f); if (m != null && f > 0) t += ' 기준점 ' + m + '프렛(' + nm(pcAt(s, m)) + ')에서 ' + Math.abs(f - m) + '칸 ' + (f > m ? '위' : '아래') + '로 기억하면 쉽습니다.'; }
   return t;
 }
-const ivExplain = semi => '루트에서 ' + semi + '칸 거리를 ' + IVL[semi] + '라고 부릅니다. ' + IVL_FEEL[semi] + (shapes(semi).length ? ' 지판 모양: ' + shapes(semi).join(', 또는 ') + '.' : '');
+const ivExplain = (semi, s0) => { const sh = shapes(semi, s0); return '루트에서 ' + semi + '칸 거리를 ' + IVL[semi] + '라고 부릅니다. ' + IVL_FEEL[semi] + (sh.length ? ' 지판 모양: ' + sh.join(', 또는 ') + '.' : ''); };
 
 /* ---------- 문제 만들기 ---------- */
 // 문제 객체: {skill, key, prompt, sub, sym, board:{...}, answers:[{t,v}], wide, mic:{pc}|{midi}, answer(v)->결과, chord:true}
 function qOpen(s) {
-  s = s == null ? rnd(4) : s; const key = 'op:' + s;
-  if (Math.random() < .5) return {skill:'basics', key, correct:STR[s].n, prompt:'색이 다른 줄의 이름은 무엇일까요?', board:{from:0, to:5, hiS:s},
-    answers:['E','A','D','G'].map(x => ({t:x, v:x})),
-    answer:v => ({ok:v === STR[s].n, title:v === STR[s].n ? '맞습니다' : '정답은 ' + STR[s].n + '줄입니다', text:'굵은 줄부터 E, A, D, G입니다. ' + STR[s].n + '줄은 ' + STR[s].no + '번 줄이라고도 부릅니다.', dots:[{s, f:0, t:STR[s].n, c:'ok'}]})};
-  return {skill:'basics', key, prompt:STR[s].n + '줄을 눌러 보세요', sub:'그 줄의 아무 칸이나 누르면 됩니다', board:{from:0, to:5},
-    sol:{s, f:0}, tap:(k) => ({ok:k === s, title:k === s ? '맞습니다' : '누른 줄은 ' + STR[k].n + '줄입니다', text:'굵은 줄부터 E, A, D, G입니다. 그림의 왼쪽(가로 그림에서는 아래)이 가장 굵은 E줄입니다.', dots:[{s, f:0, t:STR[s].n, c:'ok'}].concat(k !== s ? [{s:k, f:0, t:STR[k].n, c:'bad'}] : [])}),
+  s = s == null ? rnd(NS()) : s; const key = 'op:' + s;
+  if (Math.random() < .5) return {skill:'basics', key, correct:s, prompt:'색이 다른 줄의 이름은 무엇일까요?', board:{from:0, to:5, hiS:s},
+    answers:STR.map((x, i) => ({t:NS() > 4 ? x.no + '번 ' + x.n : x.n, v:i})),
+    answer:v => ({ok:v === s, title:v === s ? '맞습니다' : '정답은 ' + STR[s].no + '번 ' + STR[s].n + '줄입니다', text:'굵은 줄부터 ' + STR.map(x => x.n).join(', ') + '입니다. ' + STR[s].n + '줄은 ' + STR[s].no + '번 줄이라고도 부릅니다.', dots:[{s, f:0, t:STR[s].n, c:'ok'}]})};
+  return {skill:'basics', key, prompt:(NS() > 4 ? STR[s].no + '번 ' : '') + STR[s].n + '줄을 눌러 보세요', sub:'그 줄의 아무 칸이나 누르면 됩니다', board:{from:0, to:5},
+    sol:{s, f:0}, tap:(k) => ({ok:k === s, title:k === s ? '맞습니다' : '누른 줄은 ' + STR[k].n + '줄입니다', text:'굵은 줄부터 ' + STR.map(x => x.n).join(', ') + '입니다. 그림의 왼쪽(가로 그림에서는 아래)이 가장 굵은 줄입니다.', dots:[{s, f:0, t:STR[s].n, c:'ok'}].concat(k !== s ? [{s:k, f:0, t:STR[k].n, c:'bad'}] : [])}),
     mic:{pc:STR[s].pc, label:STR[s].n + '줄 개방현'}};
 }
 function qStep(kind, x) {
@@ -366,7 +392,7 @@ function qIvl(set, semiFix) {
     const lo = Math.max(0, Math.min(f, f2) - 2), hi = Math.min(12, Math.max(f, f2) + 2);
     return {skill:'intervals', key, correct:semi, prompt:'R에서 물음표까지는 무슨 음정일까요?', board:{from:lo <= 1 ? 0 : lo, to:hi, dots:[{s, f, t:'R', c:'root'}, {s:s2, f:f2, t:'?', c:'ask'}]},
       answers:set.map(v => ({t:IVL[v], v})), onShow:() => { AU.pluck(midiAt(s, f)); AU.pluck(midiAt(s2, f2), AU.now() + .45); },
-      answer:v => ({ok:v === semi, title:v === semi ? '맞습니다' : '정답은 ' + IVL[semi] + '입니다', text:ivExplain(semi), dots:[{s, f, t:'R', c:'root'}, {s:s2, f:f2, t:IVL_SHORT[semi], c:v === semi ? 'ok' : 'bad'}], play:[[s, f], [s2, f2]]})};
+      answer:v => ({ok:v === semi, title:v === semi ? '맞습니다' : '정답은 ' + IVL[semi] + '입니다', text:ivExplain(semi, s), dots:[{s, f, t:'R', c:'root'}, {s:s2, f:f2, t:IVL_SHORT[semi], c:v === semi ? 'ok' : 'bad'}], play:[[s, f], [s2, f2]]})};
   }
   const s = rnd(2), f = 2 + rnd(6), m = midiAt(s, f) + semi, pc = (pcAt(s, f) + semi) % 12, lo = Math.max(0, f - 3), hi = Math.min(12, f + 5);
   const solI = nearPos(m, s, f, lo, hi)[0] || allPos(pc, 12)[0];
@@ -385,11 +411,11 @@ function qDegree(scaleId, fix) {
   const sc = SCALES.find(x => x.id === scaleId), root = fix ? fix.root : pick([9,4,7,2,0,5]), i = fix ? fix.i : 1 + rnd(sc.st.length - 1), pc = (root + sc.st[i]) % 12, name = spell(root, sc, i);
   const rf = allPos(root, 12, [0,1]).find(p => p.f >= 2 && p.f <= 8) || allPos(root, 12, [0,1])[0];
   const lo = Math.max(0, rf.f - 1), hi = Math.min(12, rf.f + 4);
-  let solD = null; for (let s = 0; s < 4 && !solD; s++) for (let f = lo; f <= hi; f++) if (pcAt(s, f) === pc) { solD = {s, f}; break; }
+  let solD = null; for (let s = 0; s < NS() && !solD; s++) for (let f = lo; f <= hi; f++) if (pcAt(s, f) === pc) { solD = {s, f}; break; }
   return {skill:'scales', sol:solD || allPos(pc, 12)[0], key:'d:' + scaleId + ':' + i + ':' + root, prompt:nm(root, scaleFlat(root, sc)) + ' ' + sc.name + '의 ' + sc.lb[i] + '도 음을 누르세요', sub:sc.lb.join(' ') + ' 중에서, 루트 근처 상자 안에서 찾으세요',
     board:{from:lo <= 1 ? 0 : lo, to:hi, dots:[{s:rf.s, f:rf.f, t:'1', c:'root'}]},
     tap:(k, g) => { const ok = pcAt(k, g) === pc;
-      const dots = []; for (let s = 0; s < 4; s++) for (let f = lo; f <= hi; f++) { const j = sc.st.indexOf((pcAt(s, f) - root + 12) % 12); if (j >= 0) dots.push({s, f, t:sc.lb[j], c:j === i ? 'ok' : j === 0 ? 'root' : 'dim'}); }
+      const dots = []; for (let s = 0; s < NS(); s++) for (let f = lo; f <= hi; f++) { const j = sc.st.indexOf((pcAt(s, f) - root + 12) % 12); if (j >= 0) dots.push({s, f, t:sc.lb[j], c:j === i ? 'ok' : j === 0 ? 'root' : 'dim'}); }
       if (!ok) dots.push({s:k, f:g, t:nm(pcAt(k, g)), c:'bad'});
       return {ok, title:ok ? '맞습니다. ' + name + '입니다' : '정답은 ' + name + '입니다', text:sc.lb[i] + '도는 루트에서 ' + sc.st[i] + '칸 위입니다. 상자 안의 모든 스케일 음을 표시했습니다.', dots}; },
     mic:{pc, label:sc.lb[i] + '도 ' + name}};
@@ -436,11 +462,30 @@ function qEar(set, semiFix) {
   return {skill:'intervals', key:'ei:' + semi, correct:semi, prompt:'두 음 사이의 음정은 무엇일까요?', sub:'그림 없이 소리만 듣고 고르세요', replay:play, onShow:play,
     answers:set.map(v => ({t:IVL[v], v})), answer:v => ({ok:v === semi, title:v === semi ? '맞습니다' : '정답은 ' + IVL[semi] + '입니다', text:ivExplain(semi)})};
 }
+function qShape(set, idFix) {
+  const id = idFix || pick(set), pool = set.length >= 4 ? set : Object.keys(TH.GSHAPES), others = shuffle(pool.filter(x => x !== id)).slice(0, 3);
+  const sh = TH.GSHAPES[id], ch = chordById(sh.ch), notes = sh.f.map((f, s) => f < 0 ? null : nm(pcAt(s, f), [5,10,3,8,1].includes(sh.root))).filter(Boolean);
+  return {skill:'chords', key:'sh:' + id, correct:id, prompt:'이 코드 모양의 이름은?', sub:'색이 다른 점이 근음입니다. 소리 버튼으로 들어 볼 수 있습니다', board:shapeBoard(id),
+    replay:() => AU.strum(id), replayLabel:'코드 소리 듣기', onShow:() => AU.strum(id),
+    answers:shuffle([id, ...others]).map(x => ({t:x, v:x})),
+    answer:v => ({ok:v === id, title:v === id ? '맞습니다. ' + id + '입니다' : '정답은 ' + id + '입니다', text:id + '는 ' + (ch ? ch.read : '') + ' 코드입니다. 울리는 음: ' + notes.join(' ') + '.' + (sh.barre ? ' 검지로 ' + sh.barre + '프렛 여러 줄을 한꺼번에 누르는 바레 코드입니다.' : '') + (sh.f.includes(-1) ? ' ×표 줄은 치지 않거나 손가락으로 살짝 막습니다.' : '')})};
+}
+function qPower(fix) {
+  const s = fix ? fix.s : rnd(2), f = fix ? fix.f : 1 + rnd(9), pc = pcAt(s, f), name = nm(pc, [5,10,3,8,1].includes(pc)) + '5';
+  const others = shuffle([1,2,3,5,7,9,10,11].map(k => (pc + k) % 12)).slice(0, 3).map(p => nm(p, [5,10,3,8,1].includes(p)) + '5');
+  const dots = [{s, f, t:'R', c:'root'}, {s:s + 1, f:f + 2, t:'5'}, {s:s + 2, f:f + 2, t:'8'}];
+  return {skill:'chords', key:'pw:' + s + ':' + f, correct:name, prompt:'이 파워코드의 이름은?', sub:'근음(R)의 음 이름 뒤에 5를 붙입니다', board:{from:Math.max(0, f - 1), to:Math.min(12, f + 3), dots},
+    onShow:() => AU.seq([[s, f], [s + 1, f + 2], [s + 2, f + 2]], .02),
+    answers:shuffle([name, ...others]).map(x => ({t:x, v:x})),
+    answer:v => ({ok:v === name, title:v === name ? '맞습니다' : '정답은 ' + name + '입니다', text:'근음은 ' + posName(s, f) + ', ' + both(pc) + '입니다. ' + countUp(s, f)})};
+}
 function genFromDrill(d, ctx) {
   ctx = ctx || {};
   if (d.type === 'mix') return genFromDrill(pick(d.parts), ctx);
   if (d.type === 'mcq') { const L = ctx.L; if (!L || !L.bank) return qOpen(); if (!ctx.mq || !ctx.mq.length) ctx.mq = shuffle(L.bank.map((_, i) => i)); return qMcq(L.id, ctx.mq.shift()); }
   if (d.type === 'roman') return qRoman(d.mode);
+  if (d.type === 'shape') return qShape(d.set);
+  if (d.type === 'power') return qPower();
   if (d.type === 'ear') return qEar(d.set);
   if (d.type === 'open') return qOpen();
   if (d.type === 'step') return qStep();
@@ -465,6 +510,8 @@ function genFromKey(key) {
     if (p[0] === 'r') return qRhythm(['q','e','off','qe','s','gal','332','push'], p[1]);
     if (p[0] === 'ap') return qAppr(p[1] || null);
     if (p[0] === 'mq') return qMcq(p[1], +p[2]);
+    if (p[0] === 'sh') return qShape(Object.keys(TH.GSHAPES), p[1]);
+    if (p[0] === 'pw') return qPower({s:+p[1], f:+p[2]});
     if (p[0] === 'rn') return qRoman(p[1], {key:+p[2], d:+p[3]});
     if (p[0] === 'ei') { const t = +p[1]; return qEar(shuffle([3,4,5,7,10,12].filter(x => x !== t)).slice(0, 3).concat(t).sort((a, b) => a - b), t); }
   } catch (e) {}
@@ -489,16 +536,16 @@ function Runner(host, foot, opts) {
     if (q.sub) head.appendChild(el(`<div class="sub">${esc(q.sub)}</div>`));
     host.appendChild(head);
     if (q.rhythm) renderRhythm(q);
-    if (q.replay) { const rb = el(`<button class="btn block" style="min-height:64px">${I.sound}두 음 다시 듣기</button>`); rb.onclick = q.replay; host.appendChild(rb); }
+    if (q.replay) { const rb = el(`<button class="btn block" style="min-height:${q.board ? 48 : 64}px">${I.sound}${q.replayLabel || '두 음 다시 듣기'}</button>`); rb.onclick = q.replay; host.appendChild(rb); }
     let bEl = null;
     if (q.board) {
       const dots = (st.answered && st.res && st.res.dots) ? st.res.dots : (q.board.dots || []).concat(st.found, st.extra);
-      if (q.chord && st.answered) { const all = []; for (let s = 0; s < 4; s++) for (let f = 0; f <= 12; f++) { const j = q.ch.t.indexOf((pcAt(s, f) - q.root + 12) % 12); if (j >= 0) all.push({s, f, t:IVL_SHORT[q.ch.t[j]], c:j ? 'tone' : 'root'}); }
+      if (q.chord && st.answered) { const all = []; for (let s = 0; s < NS(); s++) for (let f = 0; f <= 12; f++) { const j = q.ch.t.indexOf((pcAt(s, f) - q.root + 12) % 12); if (j >= 0) all.push({s, f, t:IVL_SHORT[q.ch.t[j]], c:j ? 'tone' : 'root'}); }
         bEl = board(Object.assign({}, q.board, {dots:all, tap:(s, f) => AU.pluck(midiAt(s, f))})); }
       else bEl = board(Object.assign({}, q.board, {dots, tap:st.answered ? (s, f) => AU.pluck(midiAt(s, f)) : (q.tap || q.chord) ? onTap : null}));
       bEl.classList.add('fit'); host.appendChild(bEl);
     }
-    if (!st.answered && (q.mic || q.chord) && micOn()) host.appendChild(el(`<div class="listen" id="listen"><i class="lv"></i><span>듣는 중입니다. 베이스로 쳐 보세요${q.mic && q.mic.midi ? ' (높이까지 확인)' : ''}</span></div>`));
+    if (!st.answered && (q.mic || q.chord) && micOn()) host.appendChild(el(`<div class="listen" id="listen"><i class="lv"></i><span>듣는 중입니다. ${instName()}로 쳐 보세요${q.mic && q.mic.midi ? ' (높이까지 확인)' : ''}</span></div>`));
     if (st.chordMsg && !st.answered) host.appendChild(el(`<div class="feedback ${st.chordMsg.ok ? 'ok' : 'bad'}"><span>${esc(st.chordMsg.t)}</span></div>`));
     renderFoot();
     if (bEl) requestAnimationFrame(() => { const sb = host.closest('.sheet-body'); if (!sb) return;
@@ -524,7 +571,7 @@ function Runner(host, foot, opts) {
       if (q.answers) { const n = q.answers.length, a = el(`<div class="answers${n === 12 ? ' many' : ''}${q.wide ? ' long' : ''}" style="grid-template-columns:repeat(${q.wide && n === 4 && q.answers.some(x => String(x.t).length > 7) ? 1 : q.wide && n === 4 ? 2 : COLS[n] || 4},1fr)"></div>`);
         q.answers.forEach(x => { const b = el(`<button class="btn">${esc(x.t)}</button>`); b.onclick = () => onChoice(x.v); a.appendChild(b); }); foot.appendChild(a); }
       if (q.tap || q.chord) { const b = el('<button class="btn">정답 보기</button>'); b.onclick = () => giveUp(); foot.appendChild(b); }
-      if (q.mic || q.chord) { const m = el(`<button class="btn${D.settings.mic ? ' primary' : ''}" aria-pressed="${D.settings.mic}">${I.mic}${D.settings.mic ? '마이크 끄기' : '베이스로 치기'}</button>`); m.onclick = toggleMic; foot.appendChild(m); }
+      if (q.mic || q.chord) { const m = el(`<button class="btn${D.settings.mic ? ' primary' : ''}" aria-pressed="${D.settings.mic}">${I.mic}${D.settings.mic ? '마이크 끄기' : instName() + '로 치기'}</button>`); m.onclick = toggleMic; foot.appendChild(m); }
       if (q.rhythm) foot.appendChild(el('<p class="small muted" style="margin:0;width:100%;text-align:center">위의 보기 중에서 들린 리듬을 고르세요</p>'));
       return;
     }
@@ -629,7 +676,8 @@ function openLesson(id, startPhase) {
         b.onclick = () => { if (Clock.on) { Clock.stop(); return; } b.innerHTML = I.stop + '멈추기'; playLine(c.line.pat, 33, 84, k => draw(k % 8), () => { b.innerHTML = I.play + 'A로 들어 보기'; draw(-1); }); };
         box.appendChild(b); card.appendChild(box); }
       if (c.sound) { const b = el(`<button class="btn sm" style="align-self:flex-start">${I.sound}소리 들어 보기</button>`);
-        b.onclick = () => { const d = AU.seq(c.sound.seq, .5); if (c.sound.then) setTimeout(() => AU.seq(c.sound.then, .5), d * 1000 + 500); }; card.appendChild(b); }
+        b.onclick = () => { if (c.sound.strum) { c.sound.strum.forEach((id, k) => setTimeout(() => AU.strum(id), k * 1300)); return; }
+          const d = AU.seq(c.sound.seq, .5); if (c.sound.then) setTimeout(() => AU.seq(c.sound.then, .5), d * 1000 + 500); }; card.appendChild(b); }
       if (c.tip) card.appendChild(el(`<div class="tip">${I.tip}<span>${esc(c.tip)}</span></div>`));
       sh.body.appendChild(card);
       sh.foot.innerHTML = '';
@@ -648,11 +696,11 @@ function openLesson(id, startPhase) {
       Mic.stop(); const pass = res.right >= 8, rec = D.lessons[L.id] || (D.lessons[L.id] = {}), first = pass && !rec.done, stars = starsOf(res.right);
       rec.best = Math.max(rec.best || 0, res.right); rec.stars = Math.max(rec.stars || 0, stars); rec.tries = (rec.tries || 0) + 1; if (pass && !rec.done) { rec.done = true; rec.at = today(); }
       const gain = first ? 50 : pass ? 20 : 10; addXP(gain, true);
-      dayRec().lastLesson = L.id; setStep('lesson'); save();
+      stepsOf().last = L.id; setStep('lesson'); save();
       sh.body.innerHTML = ''; sh.scrollTop(); sh.progress(n + 2, n + (pass ? 1 : 0));
       const nextL = LESSONS[lessonIndex(L.id) + 1];
       sh.body.appendChild(el(`<div class="card result hero"><span class="eyebrow">${pass ? '통과했습니다' : '조금만 더'}</span>${starsHtml(stars)}<div class="score">${res.right}<span class="muted" style="font-size:28px"> / ${res.total}</span></div><div class="xp-gain">+${gain} XP${first ? ', 레슨 완료 보너스' : ''}</div>
-        <p>${pass ? (nextL ? '다음 레슨 "' + esc(nextL.title) + '"이 열렸습니다. 이제 베이스를 들고 배운 것을 손으로 익혀 보세요.' : '모든 레슨을 마쳤습니다. 매일 복습과 자유 연습으로 이어 가세요.') : '8개 이상 맞히면 통과입니다. 틀린 문제의 풀이를 떠올리며 한 번 더 풀어 보세요. 설명을 다시 봐도 좋습니다.'}</p></div>`));
+        <p>${pass ? (nextL ? '다음 레슨 "' + esc(nextL.title) + '"이 열렸습니다. 이제 ' + instName() + '를 들고 배운 것을 손으로 익혀 보세요.' : '모든 레슨을 마쳤습니다. 매일 복습과 자유 연습으로 이어 가세요.') : '8개 이상 맞히면 통과입니다. 틀린 문제의 풀이를 떠올리며 한 번 더 풀어 보세요. 설명을 다시 봐도 좋습니다.'}</p></div>`));
       const wrong = res.results.filter(r => !r.ok).length;
       if (wrong) sh.body.appendChild(el(`<div class="card"><b>틀린 ${wrong}문제는 내일 복습에 다시 나옵니다</b><span class="small muted">같은 문제를 며칠에 걸쳐 다시 맞히면 오래 기억에 남습니다.</span></div>`));
       sh.foot.innerHTML = '';
@@ -699,12 +747,12 @@ function playTask(sh, L, onDone) {
     $('#sq-prev', box).onclick = () => { if (i > 0) { i--; draw(); } };
     $('#sq-play', box).onclick = () => AU.seq(seq, 60 / P.bpm);
     draw(); sh.body.appendChild(box);
-    const micBtn = el(`<button class="btn block">${I.mic}베이스 소리로 자동 확인하기</button>`);
-    micBtn.onclick = async () => { if (micActive) { Mic.stop(); micActive = false; micBtn.innerHTML = I.mic + '베이스 소리로 자동 확인하기'; $('#seql', box).hidden = true; return; }
+    const micLabel = I.mic + instName() + ' 소리로 자동 확인하기', micBtn = el(`<button class="btn block">${micLabel}</button>`);
+    micBtn.onclick = async () => { if (micActive) { Mic.stop(); micActive = false; micBtn.innerHTML = micLabel; $('#seql', box).hidden = true; return; }
       const ok = await Mic.start(p => { if (!p || i >= seq.length) return; $('#seql span', box).textContent = '들린 음: ' + both(p.pc); if (p.stable && p.pc === pcAt(...seq[i])) { Mic.hist = []; adv(); } });
       if (!ok) { toast(Mic.err); return; } micActive = true; micBtn.innerHTML = I.mic + '마이크 끄기'; $('#seql', box).hidden = false; };
     sh.body.appendChild(micBtn);
-    sh.body.appendChild(el('<p class="small muted">마이크는 폰을 베이스 앰프나 몸통 가까이에 두면 잘 듣습니다. 음 이름으로 확인하므로 다른 줄의 같은 음도 맞게 처리됩니다.</p>'));
+    sh.body.appendChild(el('<p class="small muted">마이크는 폰을 앰프나 악기 몸통 가까이에 두면 잘 듣습니다. 음 이름으로 확인하므로 다른 줄의 같은 음도 맞게 처리됩니다.</p>'));
   }
   function doneMsg() { if ($('#done-msg', sh.body)) return; sh.body.appendChild(el('<div class="feedback ok" id="done-msg"><b class="h">끝까지 쳤습니다</b><span>메트로놈 빠르기를 5 올려 한 번 더 해 보세요. 실수 없이 세 번 연속 치면 손에 익은 것입니다.</span></div>')); }
   sh.foot.innerHTML = '';
@@ -726,7 +774,7 @@ function tapTrainer(rid, bpm0) {
   const pad = el('<button class="pad">박에 맞춰 여기를 두드리기</button>'); box.appendChild(pad);
   const res = el('<div class="card"><b id="tr">시작을 누르고 검은 칸에 맞춰 두드리세요</b><span class="small muted" id="ta">블루투스 이어폰과 스피커는 소리가 늦게 나와 오차가 크게 나옵니다. 폰 스피커나 유선 이어폰으로 재세요.</span></div>'); box.appendChild(res);
   $('#tp', row).onclick = () => { if (Clock.on) { Clock.stop(); return; } taps = []; $('#tp', row).innerHTML = I.stop + '멈추기';
-    Clock.start({bpm:m.getBpm(), sub:4, tick:(n, t) => { const k = n % 16; if (k % 4 === 0) AU.click(t, k === 0); if (pat.includes(k) && $('#tg', row).checked) AU.pluck(28, t, .25); }, ui:n => grid(n % 16), onstop:() => { $('#tp', row).innerHTML = I.play + '시작'; grid(-1); }}); };
+    Clock.start({bpm:m.getBpm(), sub:4, tick:(n, t) => { const k = n % 16; if (k % 4 === 0) AU.click(t, k === 0); if (pat.includes(k) && $('#tg', row).checked) AU.pluck(TH.inst().low, t, .25); }, ui:n => grid(n % 16), onstop:() => { $('#tp', row).innerHTML = I.play + '시작'; grid(-1); }}); };
   pad.addEventListener('pointerdown', e => { e.preventDefault(); if (!Clock.on) { $('#tr', res).textContent = '먼저 시작을 누르세요'; return; }
     const a = AU.ctx, lat = a.outputLatency || a.baseLatency || 0, t = a.currentTime; let best = null;
     Clock.log.forEach(([n, tt]) => { if (!pat.includes(n % 16)) return; const d = t - (tt + lat); if (best === null || Math.abs(d) < Math.abs(best)) best = d; });
@@ -791,7 +839,7 @@ function scaleView(sh) {
     const info = el(`<div class="card"><h3 style="font-size:20px">${esc(nm(root, flat) + ' ' + sc.name)}</h3><p>${esc(sc.desc)}</p>
       <table class="t"><thead><tr><th>도수</th>${sc.lb.map(x => `<td><b>${x}</b></td>`).join('')}</tr></thead><tbody><tr><th>음</th>${sc.st.map((x, i) => `<td>${spell(root, sc, i)}</td>`).join('')}</tr><tr><th>칸</th>${sc.st.map(x => `<td class="num">${x}</td>`).join('')}</tr></tbody></table></div>`);
     sh.body.appendChild(info);
-    const dots = []; for (let s = 0; s < 4; s++) for (let f = 0; f <= 12; f++) { const i = sc.st.indexOf((pcAt(s, f) - root + 12) % 12); if (i >= 0) dots.push({s, f, t:lab === 'deg' ? sc.lb[i] : spell(root, sc, i), c:i ? 'tone' : 'root'}); }
+    const dots = []; for (let s = 0; s < NS(); s++) for (let f = 0; f <= 12; f++) { const i = sc.st.indexOf((pcAt(s, f) - root + 12) % 12); if (i >= 0) dots.push({s, f, t:lab === 'deg' ? sc.lb[i] : spell(root, sc, i), c:i ? 'tone' : 'root'}); }
     const b = el('<div style="display:flex;justify-content:center"></div>'); b.appendChild(board({dots, tap:(s, f) => AU.pluck(midiAt(s, f))})); sh.body.appendChild(b);
     const pb = el(`<button class="btn">${I.sound}한 옥타브 올라가며 듣기</button>`); pb.onclick = () => { const m0 = 28 + ((root - 4 + 12) % 12); const t0 = AU.now() + .05; sc.st.concat(12).forEach((x, k) => AU.pluck(m0 + x, t0 + k * .38)); }; sh.body.appendChild(pb);
   };
@@ -807,7 +855,7 @@ function tuner(sh) {
     <div class="small muted num" id="tf"> </div><div class="strpick">${STR.map((x, i) => `<div data-s="${i}">${x.n}</div>`).join('')}</div></div>`);
   sh.body.appendChild(box);
   const btn = el(`<button class="btn primary block">${I.mic}튜너 켜기</button>`); sh.body.appendChild(btn);
-  sh.body.appendChild(el('<div class="card small"><b>맞추는 법</b><span class="muted">바늘이 왼쪽이면 음이 낮으니 줄감개를 감고, 오른쪽이면 풉니다. 가운데 초록 칸에 머무르면 맞은 것입니다. 줄을 친 뒤 손을 떼고 소리가 울리는 동안 보세요. 폰을 베이스 몸통 가까이에 두면 잘 들립니다.</span></div>'));
+  sh.body.appendChild(el('<div class="card small"><b>맞추는 법</b><span class="muted">바늘이 왼쪽이면 음이 낮으니 줄감개를 감고, 오른쪽이면 풉니다. 가운데 초록 칸에 머무르면 맞은 것입니다. 줄을 친 뒤 손을 떼고 소리가 울리는 동안 보세요. 폰을 악기 몸통 가까이에 두면 잘 들립니다.</span></div>'));
   const tuned = new Set(); let hist = [];
   btn.onclick = async () => {
     if (Mic.on) { Mic.stop(); btn.innerHTML = I.mic + '튜너 켜기'; return; }
@@ -820,7 +868,7 @@ function tuner(sh) {
       $('#tf', box).textContent = f.toFixed(1) + ' Hz';
       $('#tneedle', box).style.transform = 'rotate(' + Math.max(-60, Math.min(60, cents * 1.2)) + 'deg)';
       const h = $('#th', box), target = STR[sNear], diff = Math.round((m - target.midi) * 100);
-      if (Math.abs(diff) <= 5) { h.className = 'hint ok'; h.textContent = target.n + '줄이 맞았습니다'; tuned.add(sNear); }
+      if (Math.abs(diff) <= 5) { h.className = 'hint ok'; h.textContent = TH.strName(sNear) + '이 맞았습니다'; tuned.add(sNear); }
       else if (Math.abs(diff) > 250) { h.className = 'hint'; h.textContent = '줄 하나만 울려 주세요'; }
       else { h.className = 'hint ' + (diff < 0 ? 'lo' : 'hi'); h.textContent = target.n + '줄: ' + Math.abs(diff) + '센트 ' + (diff < 0 ? '낮음. 줄감개를 감으세요' : '높음. 줄감개를 푸세요'); }
       $$('.strpick div', box).forEach((d, i) => d.className = tuned.has(i) ? 'tuned' : i === sNear ? 'on' : '');
@@ -860,8 +908,8 @@ function renderTab() {
 }
 function viewToday(pg) {
   const d = dayRec(), cl = currentLesson(), due = reviewKeys().length, hasItems = Object.keys(D.items).length > 0;
-  const playL = LESSONS.find(l => l.id === d.lastLesson) || [...LESSONS].reverse().find(l => isDone(l.id)) || cl || LESSONS[0];
-  const reviewDone = d.steps.review || due === 0, Lv = levelInfo();
+  const ds = stepsOf(d), playL = LESSONS.find(l => l.id === ds.last) || [...LESSONS].reverse().find(l => isDone(l.id)) || cl || LESSONS[0];
+  const reviewDone = ds.review || due === 0, Lv = levelInfo();
   const totQ = Object.values(D.tot).reduce((a, r) => a + r[1], 0), totR = Object.values(D.tot).reduce((a, r) => a + r[0], 0);
   const doneN = LESSONS.filter(l => isDone(l.id)).length;
   pg.appendChild(el(`<div class="card hero lvl-card"><div class="lvl-badge"><div style="display:flex;flex-direction:column;align-items:center"><b>${Lv.level}</b><span>레벨</span></div></div>
@@ -870,8 +918,8 @@ function viewToday(pg) {
   pg.appendChild(el(`<div class="stats3"><div><b>${streak()}</b><span>연속 일수</span></div><div><b>${doneN}<span class="muted" style="font-size:16px">/${LESSONS.length}</span></b><span>완료 레슨</span></div><div><b>${totQ ? Math.round(totR / totQ * 100) + '%' : '-'}</b><span>정답률</span></div></div>`));
   const steps = [
     {id:'review', n:1, done:reviewDone, t:'복습', s:due ? '다시 볼 문제 ' + Math.min(due, 10) + '개, 약 3분' : (hasItems ? '오늘 복습할 문제가 없습니다' : '레슨을 풀면 복습 문제가 생깁니다'), go:openReview},
-    {id:'lesson', n:2, done:!!d.steps.lesson, t:cl ? tierName(cl.unit) + ' ' + (LESSONS.filter(l => l.unit === cl.unit).indexOf(cl) + 1) + '. ' + cl.title : '약한 문제 집중', s:cl ? '설명 읽고 문제 10개, 약 4분' : '모든 레슨 완료. 자주 틀린 문제를 풉니다', go:() => cl ? openLesson(cl.id) : openTool('weak')},
-    {id:'play', n:3, done:!!d.steps.play, t:'악기로: ' + playL.play.title, s:'메트로놈 ' + playL.play.bpm + ', 약 3분', go:() => openLesson(playL.id, 'play')},
+    {id:'lesson', n:2, done:!!ds.lesson, t:cl ? tierName(cl.unit) + ' ' + (LESSONS.filter(l => l.unit === cl.unit).indexOf(cl) + 1) + '. ' + cl.title : '약한 문제 집중', s:cl ? '설명 읽고 문제 10개, 약 4분' : '모든 레슨 완료. 자주 틀린 문제를 풉니다', go:() => cl ? openLesson(cl.id) : openTool('weak')},
+    {id:'play', n:3, done:!!ds.play, t:'악기로: ' + playL.play.title, s:'메트로놈 ' + playL.play.bpm + ', 약 3분', go:() => openLesson(playL.id, 'play')},
   ];
   const firstOpen = steps.find(x => !x.done);
   const card = el(`<div class="card"><div class="spread"><b style="font-size:18px">${d.done ? '오늘 연습을 마쳤습니다' : '오늘의 10분'}</b><span class="row" style="gap:6px">${steps.map(x => `<span class="led${x.done ? ' on' : ''}"></span>`).join('')}</span></div><div class="steps"></div></div>`);
@@ -888,7 +936,7 @@ function viewToday(pg) {
 function viewLearn(pg) {
   pg.appendChild(el(`<div><div class="eyebrow">6등급, ${LESSONS.length}레슨</div><h2 class="page-title">레슨 지도</h2><p class="muted small" style="margin-top:4px">문제 10개 중 8개를 맞히면 다음 레슨이 열립니다. 9개는 별 두 개, 10개는 별 세 개입니다.</p></div>`));
   const pickRow = el(`<div class="card"><div class="spread"><b>시작 등급</b><span class="small muted">고른 등급부터 열립니다</span></div><div class="chips">${UNITS.map(u => `<button class="chip" data-u="${u.id}" aria-pressed="${startTier() === u.id}">${esc(u.name)}</button>`).join('')}</div></div>`);
-  $$('[data-u]', pickRow).forEach(b => b.onclick = () => { D.settings.startTier = +b.dataset.u; save(); renderTab(); setTimeout(() => { const h = document.getElementById('tier-' + b.dataset.u); if (h) h.scrollIntoView({behavior:'smooth', block:'start'}); }, 50); });
+  $$('[data-u]', pickRow).forEach(b => b.onclick = () => { setStartTier(+b.dataset.u); renderTab(); setTimeout(() => { const h = document.getElementById('tier-' + b.dataset.u); if (h) h.scrollIntoView({behavior:'smooth', block:'start'}); }, 50); });
   pg.appendChild(pickRow);
   const cl = currentLesson(), pos = ['', 'r', '', 'l']; let k = 0;
   UNITS.forEach(u => { const ls = LESSONS.filter(l => l.unit === u.id), dn = ls.filter(l => isDone(l.id)).length;
@@ -925,6 +973,7 @@ function viewRecords(pg) {
   // 설정
   const st = el(`<div class="card"><b>설정</b>
     <label class="sw"><span>소리</span><input type="checkbox" id="s-sound" ${D.settings.sound ? 'checked' : ''}></label>
+    <div><span class="small muted">악기 (진도는 악기마다 따로 저장됩니다)</span><div class="seg" id="s-inst"><button data-v="bass">베이스</button><button data-v="guitar">일렉기타</button></div></div>
     <div><span class="small muted">테마</span><div class="seg" id="s-theme"><button data-v="stage">무대</button><button data-v="pastel">파스텔</button><button data-v="light">밝은 화면</button></div></div>
     <label class="sw"><span>모든 레슨 열기 <span class="small muted">(이미 아는 내용은 건너뛰기)</span></span><input type="checkbox" id="s-unlock" ${D.settings.unlockAll ? 'checked' : ''}></label>
     <div><span class="small muted">지판 방향</span><div class="seg" id="s-or"><button data-v="auto">자동</button><button data-v="v">세로</button><button data-v="h">가로</button></div></div>
@@ -933,14 +982,15 @@ function viewRecords(pg) {
     <span class="small muted">기록은 이 폰에만 저장됩니다. 폰을 바꾸기 전에 백업 내용을 메모장에 붙여 두세요.</span></div>`);
   $$('#s-or button', st).forEach(b => { b.setAttribute('aria-pressed', b.dataset.v === D.settings.orient); b.onclick = () => { D.settings.orient = b.dataset.v; save(); renderTab(); }; });
   $('#s-share', st).onclick = shareApp;
+  $$('#s-inst button', st).forEach(b => { b.setAttribute('aria-pressed', b.dataset.v === D.inst); b.onclick = () => { setInst(b.dataset.v); renderTab(); toast(instName() + '로 바꿨습니다'); }; });
   $('#s-sound', st).onchange = e => { D.settings.sound = e.target.checked; save(); };
   $$('#s-theme button', st).forEach(b => { b.setAttribute('aria-pressed', b.dataset.v === D.settings.theme); b.onclick = () => { D.settings.theme = b.dataset.v; save(); applyTheme(); renderTab(); }; });
   $('#s-unlock', st).onchange = e => { D.settings.unlockAll = e.target.checked; save(); };
   $('#s-exp', st).onclick = () => modal('기록 백업', `<p class="small muted">아래 글을 모두 복사해 메모장이나 카톡 나와의 채팅에 붙여 두세요.</p><textarea readonly>${esc(JSON.stringify(D))}</textarea>`, [['복사하기', m => { const t = $('textarea', m); t.select(); (navigator.clipboard ? navigator.clipboard.writeText(t.value) : Promise.reject()).then(() => toast('복사했습니다')).catch(() => { try { document.execCommand('copy'); toast('복사했습니다'); } catch (e) { toast('글을 길게 눌러 직접 복사해 주세요'); } }); }], ['닫기']]);
-  $('#s-imp', st).onclick = () => modal('백업 불러오기', '<p class="small muted">백업해 둔 글을 붙여 넣으세요. 지금 기록은 백업 내용으로 바뀝니다.</p><textarea></textarea>', [['불러오기', m => { try { const x = JSON.parse($('textarea', m).value); if (!x.lessons) throw 0; D = Object.assign(fresh(), x); save(); toast('기록을 불러왔습니다'); renderTab(); return true; } catch (e) { toast('백업 글이 올바르지 않습니다'); return false; } }], ['취소']]);
-  $('#s-reset', st).onclick = () => modal('기록을 모두 지울까요?', '<p>레슨 진도, 복습 문제, 연속 일수가 모두 지워지고 되돌릴 수 없습니다.</p>', [['모두 지우기', () => { const s = D.settings; D = fresh(); D.settings = s; save(); toast('기록을 지웠습니다'); renderTab(); return true; }, 'danger'], ['취소']]);
+  $('#s-imp', st).onclick = () => modal('백업 불러오기', '<p class="small muted">백업해 둔 글을 붙여 넣으세요. 지금 기록은 백업 내용으로 바뀝니다.</p><textarea></textarea>', [['불러오기', m => { try { const x = JSON.parse($('textarea', m).value); if (!x.lessons && !x.by) throw 0; D = Object.assign(fresh(), x); bindInst(D.inst || 'bass'); save(); toast('기록을 불러왔습니다'); renderTab(); return true; } catch (e) { toast('백업 글이 올바르지 않습니다'); return false; } }], ['취소']]);
+  $('#s-reset', st).onclick = () => modal('기록을 모두 지울까요?', '<p>레슨 진도, 복습 문제, 연속 일수가 모두 지워지고 되돌릴 수 없습니다.</p>', [['모두 지우기', () => { const s = D.settings, inst = D.inst; D = fresh(); D.settings = s; bindInst(inst); save(); toast('기록을 지웠습니다'); renderTab(); return true; }, 'danger'], ['취소']]);
   pg.appendChild(st);
-  pg.appendChild(el('<p class="small muted" style="text-align:center">베이스 트레이너, 인터넷 없이도 동작합니다</p>'));
+  pg.appendChild(el('<p class="small muted" style="text-align:center">베이스와 기타 트레이너, 인터넷 없이도 동작합니다</p>'));
 }
 function modal(title, html, btns) {
   const back = el(`<div class="modal-back"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><h3 style="font-size:19px">${esc(title)}</h3>${html}<div class="row" style="justify-content:flex-end"></div></div></div>`);
@@ -953,9 +1003,9 @@ function modal(title, html, btns) {
 
 /* ---------- 친구에게 공유 ---------- */
 const APP_URL = 'https://dhtpxor.github.io/bass-trainer/';
-const SHARE_TEXT = '베이스를 처음 배울 때 쓰는 연습 앱이에요. 폰에서 열고 "홈 화면에 추가"를 누르면 앱처럼 쓸 수 있어요.';
+const SHARE_TEXT = '베이스와 일렉기타를 처음부터 배우는 연습 앱이에요. 폰에서 열고 "홈 화면에 추가"를 누르면 앱처럼 쓸 수 있어요.';
 async function shareApp() {
-  const data = {title:'베이스 트레이너', text:SHARE_TEXT, url:APP_URL};
+  const data = {title:'베이스와 기타 트레이너', text:SHARE_TEXT, url:APP_URL};
   try { if (navigator.share) { await navigator.share(data); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
   try { await navigator.clipboard.writeText(SHARE_TEXT + ' ' + APP_URL); toast('주소를 복사했습니다. 카톡이나 문자에 붙여 넣으세요'); return; } catch (e) {}
   modal('친구에게 공유', `<p class="small muted">아래 글을 길게 눌러 복사한 뒤 카톡이나 문자에 붙여 넣으세요.</p><textarea readonly>${esc(SHARE_TEXT + ' ' + APP_URL)}</textarea>`, [['닫기']]);
@@ -1011,26 +1061,31 @@ const ART = {
 function onboarding() {
   if (D.onboarded) return;
   const slides = [
-    {h:'베이스를 처음 잡았다면', p:'줄 이름부터 코드톤과 리듬까지, 15개 레슨으로 차근차근 익힙니다. 설명은 원하는 만큼 천천히 읽고 넘기세요.', art:ART.board},
+    {h:'어떤 악기를 배우나요?', p:'베이스와 일렉기타 모두 입문부터 고수까지 6등급 36레슨이 있습니다. 진도는 악기마다 따로 저장되고, 기록 탭에서 언제든 바꿀 수 있습니다.', insts:true},
+    {h:'처음부터 차근차근', p:'줄 이름부터 코드, 리듬, 솔로까지 등급별로 익힙니다. 설명은 원하는 만큼 천천히 읽고 넘기세요.', art:ART.board},
     {h:'하루 10분, 세 단계', p:'복습, 레슨, 악기 연습 순서로 합니다. 틀린 문제는 다음 날 다시 나와서 약한 자리가 채워집니다. 맞힐수록 경험치가 쌓여 레벨이 오릅니다.', art:ART.loop},
-    {h:'베이스로 직접 쳐서 확인', p:'마이크를 켜면 화면을 누르는 대신 실제로 친 음으로 정답을 확인합니다. 튜너도 같은 마이크를 씁니다. 마이크 허락은 처음 쓸 때 따로 묻습니다.', art:ART.mic},
-    {h:'어디서 시작할까요?', p:'베이스를 처음 잡는다면 입문부터 시작하세요. 이미 칠 줄 알면 맞는 등급을 고르면 그 등급부터 열립니다. 나중에 배우기 탭에서 바꿀 수 있습니다.', tiers:true},
+    {h:'악기로 직접 쳐서 확인', p:'마이크를 켜면 화면을 누르는 대신 실제로 친 음으로 정답을 확인합니다. 튜너도 같은 마이크를 씁니다. 마이크 허락은 처음 쓸 때 따로 묻습니다.', art:ART.mic},
+    {h:'어디서 시작할까요?', p:'악기를 처음 잡는다면 입문부터 시작하세요. 이미 칠 줄 알면 맞는 등급을 고르면 그 등급부터 열립니다. 나중에 배우기 탭에서 바꿀 수 있습니다.', tiers:true},
     {h:'마음에 드는 테마를 고르세요', p:'나중에 기록 탭에서 언제든 바꿀 수 있습니다.', themes:true},
   ];
   let i = 0; const o = el('<div class="onb" role="dialog" aria-label="처음 사용 안내"></div>'); document.body.appendChild(o);
   const done = () => { D.onboarded = true; save(); o.remove(); renderTab(); };
   const draw = () => { const s = slides[i];
+    const ipick = s.insts ? `<div class="themes" style="grid-template-columns:1fr 1fr">${[['bass','베이스','4줄, 리듬과 그루브의 바닥'],['guitar','일렉기타','6줄, 코드와 리프와 솔로']].map(([k, n, d]) => `<button class="theme-pick" data-inst="${k}" aria-pressed="${D.inst === k}" style="padding:16px 10px"><b style="font-size:18px">${n}</b><span class="small muted" style="font-weight:600">${d}</span></button>`).join('')}</div>` : '';
     const tpick = s.tiers ? `<div class="chips" style="margin-top:10px">${UNITS.map(u => `<button class="chip" data-tier="${u.id}" aria-pressed="${startTier() === u.id}">${esc(u.name)}</button>`).join('')}</div><p class="small" style="margin-top:8px">${esc(UNITS.find(u => u.id === startTier()).sub)}</p>` : '';
-    const pick = tpick + (s.themes ? `<div class="themes">${Object.keys(THEMES).map(k => `<button class="theme-pick" data-t="${k}" aria-pressed="${D.settings.theme === k}"><i style="background:${THEMES[k].prev}"></i>${THEMES[k].name}</button>`).join('')}</div>` : '');
+    const pick = ipick + tpick + (s.themes ? `<div class="themes">${Object.keys(THEMES).map(k => `<button class="theme-pick" data-t="${k}" aria-pressed="${D.settings.theme === k}"><i style="background:${THEMES[k].prev}"></i>${THEMES[k].name}</button>`).join('')}</div>` : '');
     o.innerHTML = `<div class="art">${s.art || ''}</div><h2>${esc(s.h)}</h2><p>${esc(s.p)}</p>${pick}<div class="dots">${slides.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div><div class="acts"><button class="btn" id="onb-skip">${i ? '이전' : '건너뛰기'}</button><button class="btn primary" id="onb-next">${i === slides.length - 1 ? '시작하기' : '다음'}</button></div>`;
     $('#onb-skip', o).onclick = () => { if (i) { i--; draw(); } else done(); };
     $('#onb-next', o).onclick = () => { if (i < slides.length - 1) { i++; draw(); } else done(); };
     $$('.theme-pick', o).forEach(b => b.onclick = () => { D.settings.theme = b.dataset.t; save(); applyTheme(); draw(); });
-    $$('[data-tier]', o).forEach(b => b.onclick = () => { D.settings.startTier = +b.dataset.tier; save(); draw(); }); };
+    $$('[data-tier]', o).forEach(b => b.onclick = () => { setStartTier(+b.dataset.tier); draw(); });
+    $$('[data-inst]', o).forEach(b => b.onclick = () => { setInst(b.dataset.inst); draw(); }); };
   draw();
 }
 applyTheme();
 $('#sharebtn').innerHTML = I.share; $('#sharebtn').onclick = shareApp;
+$('#instchip').onclick = () => modal('악기 바꾸기', '<p class="small muted">진도와 복습은 악기마다 따로 저장됩니다.</p><div class="seg" id="m-inst"><button data-v="bass" aria-pressed="' + (D.inst === 'bass') + '">베이스</button><button data-v="guitar" aria-pressed="' + (D.inst === 'guitar') + '">일렉기타</button></div>', [['닫기']]);
+document.addEventListener('click', e => { const b = e.target.closest('#m-inst [data-v]'); if (!b) return; setInst(b.dataset.v); const back = b.closest('.modal-back'); if (back) back.remove(); renderTab(); toast(instName() + '로 바꿨습니다'); });
 if (!location.hash) history.replaceState(null, '', '#today');
 tab = TABS.some(t => t[0] === location.hash.slice(1)) ? location.hash.slice(1) : 'today';
 renderTab();

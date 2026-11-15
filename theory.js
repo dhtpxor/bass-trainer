@@ -6,14 +6,21 @@
   const KO = {C:'도',D:'레',E:'미',F:'파',G:'솔',A:'라',B:'시'};
   const NAT = [0,2,4,5,7,9,11];
   // s=0 이 가장 굵은 4번 줄(E)
-  const STR = [{n:'E',pc:4,midi:28,no:4},{n:'A',pc:9,midi:33,no:3},{n:'D',pc:2,midi:38,no:2},{n:'G',pc:7,midi:43,no:1}];
+  const INSTR = {
+    bass:{name:'베이스', strings:[{n:'E',pc:4,midi:28,no:4},{n:'A',pc:9,midi:33,no:3},{n:'D',pc:2,midi:38,no:2},{n:'G',pc:7,midi:43,no:1}], minF:35, maxF:420, low:28},
+    guitar:{name:'기타', strings:[{n:'E',pc:4,midi:40,no:6},{n:'A',pc:9,midi:45,no:5},{n:'D',pc:2,midi:50,no:4},{n:'G',pc:7,midi:55,no:3},{n:'B',pc:11,midi:59,no:2},{n:'E',pc:4,midi:64,no:1}], minF:70, maxF:1100, low:40},
+  };
+  const STR = INSTR.bass.strings.slice();
+  let INST = 'bass';
+  function setInstrument(id) { if (!INSTR[id]) id = 'bass'; INST = id; STR.splice(0, STR.length, ...INSTR[id].strings); }
+  const inst = () => INSTR[INST];
   const FRETS = 12;
   const pcAt = (s,f) => (STR[s].pc + f) % 12;
   const midiAt = (s,f) => STR[s].midi + f;
   const nm = (pc, flat) => (flat ? FLAT : SHARP)[((pc % 12) + 12) % 12];
   const both = pc => NAT.includes(pc) ? SHARP[pc] : SHARP[pc] + '/' + FLAT[pc];
   const isNat = pc => NAT.includes(pc);
-  const strName = s => STR[s].n + '줄';
+  const strName = s => (STR.length > 4 ? STR[s].no + '번 ' : '') + STR[s].n + '줄';
   const posName = (s,f) => STR[s].n + '줄 ' + (f ? f + '프렛' : '개방현');
   const allPos = (pc, maxF, strings) => {
     const o = []; maxF = maxF == null ? FRETS : maxF;
@@ -38,13 +45,14 @@
     '옥타브에서 두 칸 아래입니다. 7코드와 m7 코드에 들어갑니다.',
     '옥타브에서 한 칸 아래입니다. maj7 코드에 들어갑니다.',
     '이름이 같은 높은 음입니다.'];
-  // 루트에서 가는 줄 쪽으로 옮겨 가며 같은 음정을 찾는 모양
-  function shapes(semi) {
-    const out = [];
+  // 루트에서 가는 줄 쪽으로 옮겨 가며 같은 음정을 찾는 모양 (s0: 루트가 있는 줄)
+  function shapes(semi, s0) {
+    s0 = s0 || 0; const out = [];
     const dir = d => d === 0 ? '같은 프렛' : (d > 0 ? d + '칸 위' : (-d) + '칸 아래');
     if (semi <= 5 && semi > 0) out.push('같은 줄에서 ' + semi + '칸 위');
-    if (Math.abs(semi - 5) <= 3) out.push('한 줄 가는 쪽으로, ' + dir(semi - 5));
-    if (Math.abs(semi - 10) <= 3) out.push('두 줄 가는 쪽으로, ' + dir(semi - 10));
+    for (let k = 1; k <= 2 && s0 + k < STR.length; k++) { const d = semi - (STR[s0 + k].midi - STR[s0].midi);
+      if (Math.abs(d) <= 3) out.push((k === 1 ? '한' : '두') + ' 줄 가는 쪽으로, ' + dir(d)); }
+    if (INST === 'guitar' && s0 >= 2 && s0 <= 3) out.push('G줄과 B줄 사이는 다른 줄보다 한 칸 좁아서, 이 경계를 넘을 때는 한 칸 위로 밀립니다');
     return out;
   }
 
@@ -96,6 +104,8 @@
     {id:'gal', name:'말달리기',    s:[0,2,3,4,6,7,8,10,11,12,14,15], count:'1 & a 2 & a'},
     {id:'332', name:'당김음 3 3 2', s:[0,3,6,8,11,14],           count:'세 칸, 세 칸, 두 칸 간격으로 두 번'},
     {id:'push',name:'넷째 박 당기기', s:[0,4,8,14],               count:'하나 둘 셋 (넷) 엔'},
+    {id:'st1', name:'스트로크 다운 다운업 업다운업', s:[0,4,6,10,12,14], count:'다운, 다운 업, (쉼) 업, 다운 업'},
+    {id:'st2', name:'스트로크 다운 다운업 다운업 다운업', s:[0,4,6,8,10,12,14], count:'다운, 다운 업, 다운 업, 다운 업'},
     // 셋잇단: 한 박을 셋으로 (12칸)
     {id:'trip', name:'셋잇단 8분', n:12, sub:3, s:[0,1,2,3,4,5,6,7,8,9,10,11], count:'1 트 렛 2 트 렛', cnt:['1','트','렛','2','트','렛','3','트','렛','4','트','렛']},
     {id:'shuf', name:'셔플', n:12, sub:3, s:[0,2,3,5,6,8,9,11], count:'따-다 따-다 (긴 음, 짧은 음)', cnt:['1','트','렛','2','트','렛','3','트','렛','4','트','렛']},
@@ -170,7 +180,19 @@
   }
   const midiFromFreq = f => 69 + 12 * Math.log2(f / 440);
 
-  const api = {SHARP, FLAT, KO, NAT, STR, FRETS, pcAt, midiAt, nm, both, isNat, strName, posName, allPos, freqOf,
+  /* 기타 코드 모양: 6번 줄부터 1번 줄까지 프렛 번호, -1은 치지 않는 줄. root는 근음 */
+  const GSHAPES = {
+    'E':{f:[0,2,2,1,0,0], root:4, ch:'maj'}, 'Em':{f:[0,2,2,0,0,0], root:4, ch:'m'}, 'A':{f:[-1,0,2,2,2,0], root:9, ch:'maj'},
+    'Am':{f:[-1,0,2,2,1,0], root:9, ch:'m'}, 'C':{f:[-1,3,2,0,1,0], root:0, ch:'maj'}, 'G':{f:[3,2,0,0,0,3], root:7, ch:'maj'},
+    'D':{f:[-1,-1,0,2,3,2], root:2, ch:'maj'}, 'Dm':{f:[-1,-1,0,2,3,1], root:2, ch:'m'}, 'E7':{f:[0,2,0,1,0,0], root:4, ch:'7'},
+    'A7':{f:[-1,0,2,0,2,0], root:9, ch:'7'}, 'D7':{f:[-1,-1,0,2,1,2], root:2, ch:'7'}, 'G7':{f:[3,2,0,0,0,1], root:7, ch:'7'},
+    'C7':{f:[-1,3,2,3,1,0], root:0, ch:'7'}, 'F':{f:[1,3,3,2,1,1], root:5, ch:'maj', barre:1}, 'Bm':{f:[-1,2,4,4,3,2], root:11, ch:'m', barre:2},
+    'Am7':{f:[-1,0,2,0,1,0], root:9, ch:'m7'}, 'Em7':{f:[0,2,0,0,0,0], root:4, ch:'m7'}, 'Cmaj7':{f:[-1,3,2,0,0,0], root:0, ch:'maj7'},
+    'Dsus4':{f:[-1,-1,0,2,3,3], root:2, ch:'sus4'}, 'Asus4':{f:[-1,0,2,2,3,0], root:9, ch:'sus4'}, 'Fmaj7':{f:[-1,-1,3,2,1,0], root:5, ch:'maj7'},
+    'Cadd9':{f:[-1,3,2,0,3,0], root:0, ch:'add9'}, 'B7':{f:[-1,2,1,2,0,2], root:11, ch:'7'},
+  };
+
+  const api = {INSTR, setInstrument, inst, GSHAPES, SHARP, FLAT, KO, NAT, STR, FRETS, pcAt, midiAt, nm, both, isNat, strName, posName, allPos, freqOf,
     IVL, IVL_SHORT, IVL_FEEL, shapes, SCALES, scaleFlat, spell, CHORDS, chordById, ROOT_NAMES, rootFlat, RHYTHMS,
     BOX_DAYS, srsUpdate, addDays, dayKey, dueItems, detectPitch, midiFromFreq};
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TH = api;

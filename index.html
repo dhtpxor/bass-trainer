@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>베이스 트레이너</title>
-<meta name="description" content="초보 베이시스트를 위한 지판, 음정, 코드톤, 리듬 학습 앱">
+<title>베이스와 기타 트레이너</title>
+<meta name="description" content="베이스와 일렉기타를 입문부터 고수까지 배우는 학습 앱">
 <meta name="theme-color" content="#0c0d0f" id="theme-color">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="베이스 트레이너">
+<meta name="apple-mobile-web-app-title" content="베이스와 기타">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png">
@@ -24,6 +24,7 @@
   <img class="logo" src="icon-192.png" alt="">
   <h1 id="bar-title">오늘</h1>
   <button class="btn sm" id="install" hidden>앱 설치</button>
+  <button class="chip" id="instchip" aria-label="악기 바꾸기"></button>
   <button class="share-btn" id="sharebtn" aria-label="친구에게 공유"></button>
   <span class="lv-chip" id="lvchip"></span>
 </header>
@@ -32,6 +33,7 @@
 <div id="sheet-root"></div>
 <script src="theory.js"></script>
 <script src="content.js"></script>
+<script src="guitar.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
