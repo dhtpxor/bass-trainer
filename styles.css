@@ -350,3 +350,16 @@ select.btn{appearance:auto}
 .skip-btn{width:100%;background:transparent;border-color:transparent;color:var(--muted);min-height:36px;font-weight:600}
 .skip-btn:active{color:var(--ink)}
 .sheet-foot .in>.skip-btn,.sheet-foot .in>.btn.block{flex:1 1 100%}
+
+/* 악기 스위치 */
+.inst-wrap{display:flex;flex-direction:column;gap:8px}
+.inst-switch{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:var(--bg);border:1px solid var(--line);border-radius:16px}
+.inst-switch button{border:0;background:none;border-radius:12px;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:var(--muted);cursor:pointer}
+.inst-switch button b{font-size:16px;font-weight:800}
+.inst-switch button span{font-size:12px;font-weight:600;opacity:.8}
+.inst-switch button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent,#1a1205)}
+.inst-tip{position:relative;display:flex;align-items:center;gap:10px;padding:10px 12px 10px 14px;border-radius:12px;background:var(--raised);border:1px solid var(--accent);font-size:14px;line-height:1.45}
+.inst-tip::before{content:"";position:absolute;top:-7px;left:75%;width:12px;height:12px;background:var(--raised);border-left:1px solid var(--accent);border-top:1px solid var(--accent);transform:translateX(-50%) rotate(45deg)}
+.inst-tip span{flex:1}
+.inst-tip button{flex:none;border:0;background:none;color:var(--muted);font-size:18px;width:32px;height:32px;border-radius:8px}
+#instchip .caret{margin-left:4px;font-size:11px;opacity:.7}

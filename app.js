@@ -97,7 +97,7 @@ function levelInfo(xp = D.xp || 0) {
   const title = LV_TITLES.filter(t => level >= t[0]).pop()[1];
   return {level, into:xp - base, need:next - base, pct:Math.round((xp - base) / (next - base) * 100), title};
 }
-function updateChip() { const c = $('#lvchip'); if (c) c.innerHTML = '<span class="led amber"></span>Lv ' + levelInfo().level; const ic = $('#instchip'); if (ic) ic.textContent = instName(); }
+function updateChip() { const c = $('#lvchip'); if (c) c.innerHTML = '<span class="led amber"></span>Lv ' + levelInfo().level; const ic = $('#instchip'); if (ic) ic.innerHTML = esc(instName()) + '<span class="caret" aria-hidden="true">▾</span>'; }
 function xpPop(t) { const e = el(`<div class="xp-pop">${esc(t)}</div>`); document.body.appendChild(e); setTimeout(() => e.remove(), 1100); }
 function addXP(n, pop) {
   const before = levelInfo().level; D.xp = (D.xp || 0) + n; save(); updateChip();
@@ -910,7 +910,17 @@ function renderTab() {
   const m = $('#main'); m.innerHTML = ''; const pg = el('<div class="page"></div>'); m.appendChild(pg);
   ({today:viewToday, learn:viewLearn, practice:viewPractice, records:viewRecords})[tab](pg);
 }
+/* 악기 스위치: 오늘과 배우기 화면 맨 위 */
+function instSwitch(pg) {
+  const w = el(`<div class="inst-wrap"><div class="inst-switch" role="group" aria-label="악기 고르기">${[['bass','베이스','4줄'],['guitar','일렉기타','6줄']].map(([k, n, sub]) => `<button data-i="${k}" aria-pressed="${D.inst === k}"><b>${n}</b><span>${sub}</span></button>`).join('')}</div></div>`);
+  const tipOff = () => { if (!D.settings.instTip) { D.settings.instTip = true; save(); } };
+  if (!D.settings.instTip) { const t = el(`<div class="inst-tip" role="note"><span>여기서 <b>일렉기타</b>로 바꿀 수 있어요. 진도는 악기마다 따로 저장됩니다.</span><button aria-label="알림 닫기">${I.x || '×'}</button></div>`);
+    $('button', t).onclick = () => { tipOff(); t.remove(); }; w.appendChild(t); }
+  $$('.inst-switch button', w).forEach(b => b.onclick = () => { tipOff(); if (b.dataset.i === D.inst) { renderTab(); return; } setInst(b.dataset.i); renderTab(); updateChip(); toast(instName() + '로 바꿨습니다'); });
+  pg.appendChild(w);
+}
 function viewToday(pg) {
+  instSwitch(pg);
   const d = dayRec(), cl = currentLesson(), due = reviewKeys().length, hasItems = Object.keys(D.items).length > 0;
   const ds = stepsOf(d), playL = LESSONS.find(l => l.id === ds.last) || [...LESSONS].reverse().find(l => isDone(l.id)) || cl || LESSONS[0];
   const reviewDone = ds.review || due === 0, Lv = levelInfo();
@@ -938,6 +948,7 @@ function viewToday(pg) {
   shareCard(pg);
 }
 function viewLearn(pg) {
+  instSwitch(pg);
   pg.appendChild(el(`<div><div class="eyebrow">6등급, ${LESSONS.length}레슨</div><h2 class="page-title">레슨 지도</h2><p class="muted small" style="margin-top:4px">문제 10개 중 8개를 맞히면 다음 레슨이 열립니다. 9개는 별 두 개, 10개는 별 세 개입니다.</p></div>`));
   const pickRow = el(`<div class="card"><div class="spread"><b>시작 등급</b><span class="small muted">고른 등급부터 열립니다</span></div><div class="chips">${UNITS.map(u => `<button class="chip" data-u="${u.id}" aria-pressed="${startTier() === u.id}">${esc(u.name)}</button>`).join('')}</div></div>`);
   $$('[data-u]', pickRow).forEach(b => b.onclick = () => { setStartTier(+b.dataset.u); renderTab(); setTimeout(() => { const h = document.getElementById('tier-' + b.dataset.u); if (h) h.scrollIntoView({behavior:'smooth', block:'start'}); }, 50); });
@@ -1089,7 +1100,7 @@ function onboarding() {
 applyTheme();
 $('#sharebtn').innerHTML = I.share; $('#sharebtn').onclick = shareApp;
 $('#instchip').onclick = () => modal('악기 바꾸기', '<p class="small muted">진도와 복습은 악기마다 따로 저장됩니다.</p><div class="seg" id="m-inst"><button data-v="bass" aria-pressed="' + (D.inst === 'bass') + '">베이스</button><button data-v="guitar" aria-pressed="' + (D.inst === 'guitar') + '">일렉기타</button></div>', [['닫기']]);
-document.addEventListener('click', e => { const b = e.target.closest('#m-inst [data-v]'); if (!b) return; setInst(b.dataset.v); const back = b.closest('.modal-back'); if (back) back.remove(); renderTab(); toast(instName() + '로 바꿨습니다'); });
+document.addEventListener('click', e => { const b = e.target.closest('#m-inst [data-v]'); if (!b) return; D.settings.instTip = true; setInst(b.dataset.v); updateChip(); const back = b.closest('.modal-back'); if (back) back.remove(); renderTab(); toast(instName() + '로 바꿨습니다'); });
 if (!location.hash) history.replaceState(null, '', '#today');
 tab = TABS.some(t => t[0] === location.hash.slice(1)) ? location.hash.slice(1) : 'today';
 renderTab();
