@@ -346,3 +346,7 @@ select.btn{appearance:auto}
 @keyframes pop{0%{opacity:0;transform:translate(-50%,-30%) scale(.8)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.05)}100%{opacity:0;transform:translate(-50%,-95%)}}
 
 @media (min-width:720px){.tools{grid-template-columns:repeat(3,1fr)}}
+
+.skip-btn{width:100%;background:transparent;border-color:transparent;color:var(--muted);min-height:36px;font-weight:600}
+.skip-btn:active{color:var(--ink)}
+.sheet-foot .in>.skip-btn,.sheet-foot .in>.btn.block{flex:1 1 100%}

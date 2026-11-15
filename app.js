@@ -573,6 +573,7 @@ function Runner(host, foot, opts) {
       if (q.tap || q.chord) { const b = el('<button class="btn">정답 보기</button>'); b.onclick = () => giveUp(); foot.appendChild(b); }
       if (q.mic || q.chord) { const m = el(`<button class="btn${D.settings.mic ? ' primary' : ''}" aria-pressed="${D.settings.mic}">${I.mic}${D.settings.mic ? '마이크 끄기' : instName() + '로 치기'}</button>`); m.onclick = toggleMic; foot.appendChild(m); }
       if (q.rhythm) foot.appendChild(el('<p class="small muted" style="margin:0;width:100%;text-align:center">위의 보기 중에서 들린 리듬을 고르세요</p>'));
+      const sk = el('<button class="btn sm skip-btn">이 문제 넘어가기</button>'); sk.onclick = skip; foot.appendChild(sk);
       return;
     }
     const r = st.res; footWrap.classList.add(r.ok ? 'ok' : 'bad');
@@ -616,6 +617,7 @@ function Runner(host, foot, opts) {
     const r = q.tap(q.sol.s, q.sol.f);
     finish({ok:false, title:'정답을 확인하세요', text:r.text, dots:(r.dots || []).filter(d => d.c !== 'bad')});
   }
+  function skip() { if (st.answered) return; Clock.stop(); st.combo = 0; st.results.push({key:st.q.key, ok:false, skip:true}); next(); }
   function finish(res) {
     if (st.answered) return; st.answered = true; st.res = res; st.chordMsg = null; Clock.stop();
     if (res.ok) { st.right++; st.combo++; st.gained = 10 + Math.min(st.combo - 1, 4) * 2; addXP(st.gained); }
@@ -701,13 +703,15 @@ function openLesson(id, startPhase) {
       const nextL = LESSONS[lessonIndex(L.id) + 1];
       sh.body.appendChild(el(`<div class="card result hero"><span class="eyebrow">${pass ? '통과했습니다' : '조금만 더'}</span>${starsHtml(stars)}<div class="score">${res.right}<span class="muted" style="font-size:28px"> / ${res.total}</span></div><div class="xp-gain">+${gain} XP${first ? ', 레슨 완료 보너스' : ''}</div>
         <p>${pass ? (nextL ? '다음 레슨 "' + esc(nextL.title) + '"이 열렸습니다. 이제 ' + instName() + '를 들고 배운 것을 손으로 익혀 보세요.' : '모든 레슨을 마쳤습니다. 매일 복습과 자유 연습으로 이어 가세요.') : '8개 이상 맞히면 통과입니다. 틀린 문제의 풀이를 떠올리며 한 번 더 풀어 보세요. 설명을 다시 봐도 좋습니다.'}</p></div>`));
-      const wrong = res.results.filter(r => !r.ok).length;
+      const wrong = res.results.filter(r => !r.ok && !r.skip).length, skipped = res.results.filter(r => r.skip).length;
+      if (skipped) sh.body.appendChild(el(`<div class="card"><b>넘어간 ${skipped}문제는 점수에 들어가지 않았습니다</b><span class="small muted">복습 목록에도 넣지 않습니다. 준비되면 다시 풀어 보세요.</span></div>`));
       if (wrong) sh.body.appendChild(el(`<div class="card"><b>틀린 ${wrong}문제는 내일 복습에 다시 나옵니다</b><span class="small muted">같은 문제를 며칠에 걸쳐 다시 맞히면 오래 기억에 남습니다.</span></div>`));
       sh.foot.innerHTML = '';
       if (pass) { const a = el('<button class="btn">레슨 목록</button>'); a.onclick = () => history.back();
         const b = el('<button class="btn primary">악기로 해 보기</button>'); b.onclick = () => play(); sh.foot.append(a, b); }
       else { const a = el('<button class="btn">설명 다시 보기</button>'); a.onclick = () => { idx = 0; cards(); };
-        const b = el('<button class="btn primary">다시 풀기</button>'); b.onclick = () => drill(); sh.foot.append(a, b); }
+        const b = el('<button class="btn primary">다시 풀기</button>'); b.onclick = () => drill(); sh.foot.append(a, b);
+        if (nextL) { const c = el('<button class="btn block">통과하지 않고 다음 레슨으로</button>'); c.onclick = () => { rec.done = true; rec.at = rec.at || today(); save(); location.replace('#lesson-' + nextL.id); }; sh.foot.appendChild(c); } }
     }
     function play() { phase = 'play'; sh.progress(n + 2, n + 1); sh.body.innerHTML = ''; sh.scrollTop(); playTask(sh, L, () => { setStep('play'); }); }
     if (phase === 'play') play(); else if (phase === 'drill') drill(); else cards();

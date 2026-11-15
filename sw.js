@@ -1,5 +1,5 @@
 /* 오프라인 동작: 앱 파일은 미리 저장하고, 열 때마다 뒤에서 새 버전으로 갈아 둔다 */
-const VERSION = 'bass-trainer-v8';
+const VERSION = 'bass-trainer-v9';
 const SHELL = ['./', 'index.html', 'styles.css', 'theory.js', 'content.js', 'guitar.js', 'app.js', 'manifest.webmanifest',
   'icon-192.png', 'icon-512.png', 'icon-180.png', 'icon.svg'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
